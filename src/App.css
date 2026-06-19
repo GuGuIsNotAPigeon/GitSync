@@ -67,3 +67,15 @@ body{font-family:'Inter','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-ser
 
 /* 错误提示 */
 .error{background:rgba(255,77,77,0.1);border:1px solid rgba(255,77,77,0.2);color:#ff6b6b;padding:12px 18px;border-radius:12px;font-size:13px;margin-bottom:16px;backdrop-filter:blur(10px)}
+
+/* 提交详情面板 */
+.commit-detail{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:20px;backdrop-filter:blur(12px);margin-top:8px}
+.detail-file{margin-bottom:16px;border:1px solid rgba(255,255,255,0.04);border-radius:10px;overflow:hidden;background:rgba(0,0,0,0.2)}
+.detail-file-header{display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px}
+.file-status{font-family:'SF Mono',monospace;font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600}
+.file-status-A{background:rgba(76,175,80,0.2);color:#4caf50}
+.file-status-D{background:rgba(244,67,54,0.2);color:#f44336}
+.file-status-M{background:rgba(255,152,0,0.2);color:#ff9800}
+.file-status-R{background:rgba(156,39,176,0.2);color:#9c27b0}
+.file-path{color:#dfe6e9}
+.diff-content{font-family:'SF Mono','Fira Code',monospace;font-size:12px;line-height:1.6;padding:12px 14px;overflow-x:auto;white-space:pre;color:rgba(255,255,255,0.7)}
