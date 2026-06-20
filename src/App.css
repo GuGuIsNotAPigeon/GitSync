@@ -130,3 +130,19 @@ body{font-family:'Inter','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-ser
   padding: 10px 0;
   border-bottom: 1px solid rgba(255,255,255,0.04);
 }
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+}
+.section-header:hover {
+  background: rgba(255,255,255,0.03);
+}
+.section-header .section-title {
+  margin-bottom: 0;
+}

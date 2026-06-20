@@ -4,7 +4,7 @@ use git2::{Oid, Repository, Sort};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct Commit {
     hash: String,
     author: String,
@@ -988,6 +988,325 @@ fn get_remotes(path: String) -> Result<Vec<RemoteInfo>, String> {
     Ok(remotes)
 }
 
+// ====================
+// Diff 语法高亮与并排对比
+// ====================
+
+#[derive(Serialize)]
+struct DiffDetail {
+    old_content: String,
+    new_content: String,
+    hunks: Vec<DiffHunk>,
+}
+
+#[derive(Serialize)]
+struct DiffHunk {
+    old_start: usize,
+    old_lines: usize,
+    new_start: usize,
+    new_lines: usize,
+    lines: Vec<DiffLine>,
+}
+
+#[derive(Serialize, Clone)]
+struct DiffLine {
+    origin: String,
+    content: String,
+}
+
+#[tauri::command]
+fn get_diff_detail(path: String, commit_hash: String) -> Result<Vec<(String, DiffDetail)>, String> {
+    let expanded = shellexpand::tilde(&path).to_string();
+    let repo = Repository::open(Path::new(&expanded)).map_err(|e| format!("无法打开仓库: {}", e))?;
+    let oid = Oid::from_str(&commit_hash).map_err(|e| format!("无效哈希: {}", e))?;
+    let commit = repo.find_commit(oid).map_err(|e| format!("找不到提交: {}", e))?;
+    let tree = commit.tree().map_err(|e| format!("无法获取树: {}", e))?;
+    let parent_tree = commit.parents().next().and_then(|p| p.tree().ok());
+
+    let diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), None).map_err(|e| format!("无法生成 Diff: {}", e))?;
+    let deltas: Vec<git2::DiffDelta<'_>> = diff.deltas().collect();
+
+    let mut results = Vec::new();
+
+    for (idx, delta) in deltas.iter().enumerate() {
+        let file_path = delta.new_file().path().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+        let old_content = if let Some(parent_tree) = parent_tree.as_ref() {
+            parent_tree.get_path(Path::new(&file_path)).ok().and_then(|e| repo.find_blob(e.id()).ok()).map(|b| String::from_utf8_lossy(b.content()).to_string()).unwrap_or_default()
+        } else { String::new() };
+        let new_content = tree.get_path(Path::new(&file_path)).ok().and_then(|e| repo.find_blob(e.id()).ok()).map(|b| String::from_utf8_lossy(b.content()).to_string()).unwrap_or_default();
+
+        let patch = git2::Patch::from_diff(&diff, idx).map_err(|e| format!("Patch 创建失败: {}", e))?;
+        let mut hunks = Vec::new();
+        if let Some(mut p) = patch {
+            let mut current_old_start = 0;
+            let mut current_new_start = 0;
+            let mut current_lines = Vec::new();
+
+            p.print(&mut |_delta, hunk, line| {
+                if let Some(hunk) = hunk {
+                    if !current_lines.is_empty() {
+                        hunks.push(DiffHunk {
+                            old_start: current_old_start,
+                            old_lines: 0,
+                            new_start: current_new_start,
+                            new_lines: 0,
+                            lines: current_lines.clone(),
+                        });
+                        current_lines.clear();
+                    }
+                    let header = String::from_utf8_lossy(hunk.header()).to_string();
+                    let (os, _ol, ns, _nl) = parse_hunk_header(&header);
+                    current_old_start = os;
+                    current_new_start = ns;
+                } else {
+                    current_lines.push(DiffLine {
+                        origin: match line.origin() {
+                            '+' => "+".into(),
+                            '-' => "-".into(),
+                            ' ' => " ".into(),
+                            _ => "?".into(),
+                        },
+                        content: String::from_utf8_lossy(line.content()).to_string(),
+                    });
+                }
+                true
+            }).map_err(|e| format!("Diff 打印失败: {}", e))?;
+
+            if !current_lines.is_empty() {
+                hunks.push(DiffHunk {
+                    old_start: current_old_start,
+                    old_lines: 0,
+                    new_start: current_new_start,
+                    new_lines: 0,
+                    lines: current_lines,
+                });
+            }
+        }
+        results.push((file_path, DiffDetail { old_content, new_content, hunks }));
+    }
+    Ok(results)
+}
+
+fn parse_hunk_header(header: &str) -> (usize, usize, usize, usize) {
+    let parts: Vec<&str> = header.split_whitespace().collect();
+    if parts.len() < 4 { return (0, 0, 0, 0); }
+    let old = parts[0].trim_start_matches("@@").trim();
+    let new = parts[2].trim();
+    let old_parts: Vec<&str> = old.split(',').collect();
+    let new_parts: Vec<&str> = new.split(',').collect();
+    let old_start = old_parts[0].parse::<isize>().unwrap_or(0).unsigned_abs();
+    let old_lines = if old_parts.len() > 1 { old_parts[1].parse().unwrap_or(0) } else { 1 };
+    let new_start = new_parts[0].parse::<isize>().unwrap_or(0).unsigned_abs();
+    let new_lines = if new_parts.len() > 1 { new_parts[1].parse().unwrap_or(0) } else { 1 };
+    (old_start, old_lines, new_start, new_lines)
+}
+
+// ====================
+// 虚拟滚动分页
+// ====================
+
+#[tauri::command]
+fn get_commits_paginated(path: String, page: usize, page_size: usize) -> Result<(Vec<Commit>, usize), String> {
+    let all = get_commits(path)?;
+    let total = all.len();
+    let start = page * page_size;
+    let end = (start + page_size).min(total);
+    let page_data = all[start..end].to_vec();
+    Ok((page_data, total))
+}
+
+// ====================
+// Git Hooks 管理
+// ====================
+
+#[tauri::command]
+fn get_hooks(path: String) -> Result<Vec<String>, String> {
+    let hooks_dir = format!("{}/.git/hooks", shellexpand::tilde(&path));
+    let mut hooks = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&hooks_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.ends_with(".sample") { hooks.push(name); }
+        }
+    }
+    Ok(hooks)
+}
+
+#[tauri::command]
+fn get_hook_content(path: String, hook_name: String) -> Result<String, String> {
+    let hook_path = format!("{}/.git/hooks/{}", shellexpand::tilde(&path), hook_name);
+    std::fs::read_to_string(&hook_path).map_err(|e| format!("读取失败: {}", e))
+}
+
+#[tauri::command]
+fn save_hook_content(path: String, hook_name: String, content: String) -> Result<(), String> {
+    let hook_path = format!("{}/.git/hooks/{}", shellexpand::tilde(&path), hook_name);
+    std::fs::write(&hook_path, content).map_err(|e| format!("写入失败: {}", e))?;
+    Ok(())
+}
+
+// ====================
+// 图形化合并冲突解决
+// ====================
+
+#[derive(Serialize)]
+struct ConflictDetail {
+    path: String,
+    ours: String,
+    theirs: String,
+    merged: String,
+    conflict_blocks: Vec<ConflictBlock>,
+}
+
+#[derive(Serialize)]
+struct ConflictBlock {
+    ours_text: String,
+    theirs_text: String,
+}
+
+#[tauri::command]
+fn get_conflict_detail(path: String) -> Result<Vec<ConflictDetail>, String> {
+    let expanded = shellexpand::tilde(&path).to_string();
+    let repo = Repository::open(Path::new(&expanded)).map_err(|e| format!("无法打开仓库: {}", e))?;
+    let mut conflict_files = Vec::new();
+    
+    if let Ok(statuses) = repo.statuses(None) {
+        for entry in statuses.iter() {
+            if entry.status() == git2::Status::CONFLICTED {
+                let file_path = entry.path().unwrap_or("未知").to_string();
+                let full_path = format!("{}/{}", expanded, file_path);
+                if let Ok(content) = std::fs::read_to_string(&full_path) {
+                    let mut ours = String::new();
+                    let mut theirs = String::new();
+                    let mut merged = String::new();
+                    let mut blocks = Vec::new();
+                    let mut in_ours = false;
+                    let mut in_theirs = false;
+                    let mut ours_lines = Vec::new();
+                    let mut theirs_lines = Vec::new();
+                    
+                    for line in content.lines() {
+                        if line.starts_with("<<<<<<<") {
+                            in_ours = true;
+                            continue;
+                        } else if line.starts_with("=======") {
+                            in_ours = false;
+                            in_theirs = true;
+                            continue;
+                        } else if line.starts_with(">>>>>>>") {
+                            in_theirs = false;
+                            blocks.push(ConflictBlock {
+                                ours_text: ours_lines.join("\n"),
+                                theirs_text: theirs_lines.join("\n"),
+                            });
+                            ours_lines.clear();
+                            theirs_lines.clear();
+                            continue;
+                        }
+                        
+                        if in_ours {
+                            ours_lines.push(line.to_string());
+                        } else if in_theirs {
+                            theirs_lines.push(line.to_string());
+                        } else {
+                            merged.push_str(line);
+                            merged.push('\n');
+                        }
+                    }
+                    
+                    ours = blocks.iter().map(|b| b.ours_text.as_str()).collect::<Vec<&str>>().join("\n");
+                    theirs = blocks.iter().map(|b| b.theirs_text.as_str()).collect::<Vec<&str>>().join("\n");
+                    
+                    conflict_files.push(ConflictDetail {
+                        path: file_path,
+                        ours,
+                        theirs,
+                        merged,
+                        conflict_blocks: blocks,
+                    });
+                }
+            }
+        }
+    }
+    Ok(conflict_files)
+}
+
+#[tauri::command]
+fn resolve_conflict(path: String, file_path: String, resolution: String) -> Result<(), String> {
+    let expanded = shellexpand::tilde(&path).to_string();
+    let full_path = format!("{}/{}", expanded, file_path);
+    std::fs::write(&full_path, resolution).map_err(|e| format!("写入失败: {}", e))?;
+    Ok(())
+}
+
+// ====================
+// 插件/脚本扩展系统
+// ====================
+
+#[tauri::command]
+fn list_scripts() -> Result<Vec<String>, String> {
+    let scripts_dir = shellexpand::tilde("~/.git-tool/scripts").to_string();
+    let dir = Path::new(&scripts_dir);
+    if !dir.exists() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("创建脚本目录失败: {}", e))?;
+    }
+    let mut scripts = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(name) = path.file_name() {
+                    scripts.push(name.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+    Ok(scripts)
+}
+
+#[tauri::command]
+fn run_script(path: String, script_name: String) -> Result<String, String> {
+    let expanded = shellexpand::tilde(&path).to_string();
+    let scripts_dir = shellexpand::tilde("~/.git-tool/scripts").to_string();
+    let script_path = format!("{}/{}", scripts_dir, script_name);
+    
+    let output = std::process::Command::new(&script_path)
+        .arg(&expanded)
+        .output()
+        .map_err(|e| format!("执行脚本失败: {}", e))?;
+    
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+    
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+// ====================
+// 导出报告
+// ====================
+
+#[tauri::command]
+fn export_report_markdown(path: String) -> Result<String, String> {
+    let health = get_health_report(path.clone())?;
+    let contributors = get_contributors(path.clone())?;
+    let hot_files = get_hot_files(path.clone())?;
+
+    let mut md = String::from("# 仓库分析报告\n\n## 健康报告\n");
+    md.push_str(&format!("- 大文件: {}\n", health.large_files.join(", ")));
+    md.push_str(&format!("- 无上游分支: {}\n", health.stale_branches.join(", ")));
+    md.push_str(&format!("- 冲突文件: {}\n\n", health.conflicts.join(", ")));
+    md.push_str("## 贡献者统计\n");
+    for c in &contributors {
+        md.push_str(&format!("- {}: {} 次提交, +{}/-{}\n", c.author, c.commits, c.additions, c.deletions));
+    }
+    md.push_str("\n## 热点文件\n");
+    for f in &hot_files {
+        md.push_str(&format!("- {}: {} 次变更\n", f.path, f.changes));
+    }
+    Ok(md)
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -1014,7 +1333,17 @@ fn main() {
             filter_commits,
             get_tags,
             create_tag,
-            get_remotes
+            get_remotes,
+            get_diff_detail,
+            get_commits_paginated,
+            get_hooks,
+            get_hook_content,
+            save_hook_content,
+            get_conflict_detail,
+            resolve_conflict,
+            list_scripts,
+            run_script,
+            export_report_markdown
         ])
         .run(tauri::generate_context!())
         .expect("启动失败");
