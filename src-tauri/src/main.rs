@@ -1640,6 +1640,126 @@ fn git_query(path: String, sql: String) -> Result<QueryResult, String> {
     })
 }
 
+// ====================
+// Git 时间机器
+// ====================
+
+#[derive(Serialize)]
+struct TimeMachineSnapshot {
+    commit_hash: String,
+    author: String,
+    time: String,
+    message: String,
+    files: Vec<TimeMachineFile>,
+}
+
+#[derive(Serialize)]
+struct TimeMachineFile {
+    path: String,
+    size: usize,
+    is_directory: bool,
+}
+
+#[tauri::command]
+fn get_file_content_at_commit(path: String, commit_hash: String, file_path: String) -> Result<String, String> {
+    let expanded = shellexpand::tilde(&path).to_string();
+    let repo = Repository::open(Path::new(&expanded))
+        .map_err(|e| format!("无法打开仓库: {}", e))?;
+    let oid = Oid::from_str(&commit_hash).map_err(|e| format!("无效的哈希: {}", e))?;
+    let commit = repo.find_commit(oid).map_err(|e| format!("找不到提交: {}", e))?;
+    let tree = commit.tree().map_err(|e| format!("无法获取树: {}", e))?;
+
+    let entry = tree.get_path(Path::new(&file_path))
+        .map_err(|e| format!("找不到文件: {}", e))?;
+    let blob = repo.find_blob(entry.id()).map_err(|e| format!("无法获取文件内容: {}", e))?;
+    Ok(String::from_utf8_lossy(blob.content()).to_string())
+}
+
+#[tauri::command]
+fn get_time_machine_snapshot(path: String, timestamp: i64) -> Result<TimeMachineSnapshot, String> {
+    let expanded = shellexpand::tilde(&path).to_string();
+    let repo = Repository::open(Path::new(&expanded))
+        .map_err(|e| format!("无法打开仓库: {}", e))?;
+
+    let mut revwalk = repo.revwalk().map_err(|e| format!("无法创建 revwalk: {}", e))?;
+    revwalk.push_head().map_err(|e| format!("无法推送 HEAD: {}", e))?;
+    revwalk.set_sorting(Sort::TIME).map_err(|e| format!("无法设置排序: {}", e))?;
+
+    let mut closest_commit: Option<(Oid, i64)> = None;
+    for oid in revwalk {
+        let oid = oid.map_err(|e| format!("遍历失败: {}", e))?;
+        let commit = repo.find_commit(oid).map_err(|e| format!("找不到提交: {}", e))?;
+        let time = commit.time().seconds();
+        if time <= timestamp {
+            closest_commit = Some((oid, time));
+            break;
+        }
+    }
+
+    let (oid, _) = closest_commit.ok_or("没有找到该时间点之前的提交")?;
+    let commit = repo.find_commit(oid).map_err(|e| format!("找不到提交: {}", e))?;
+    let tree = commit.tree().map_err(|e| format!("无法获取树: {}", e))?;
+
+    let commit_hash = oid.to_string();
+    let author_name = commit.author().name().unwrap_or("未知").to_string();
+    let commit_time = commit.time();
+    let timestamp_str = chrono::DateTime::from_timestamp(commit_time.seconds(), 0)
+        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+        .unwrap_or_else(|| "未知时间".into());
+    let message = commit.message().unwrap_or("").to_string();
+
+    let mut files = Vec::new();
+    tree.walk(git2::TreeWalkMode::PreOrder, |_, entry| {
+        let name = entry.name().unwrap_or("未知");
+        let kind = entry.kind();
+        let is_dir = kind == Some(git2::ObjectType::Tree);
+        let size = if is_dir {
+            0
+        } else {
+            repo.find_blob(entry.id()).map(|b| b.size()).unwrap_or(0)
+        };
+        files.push(TimeMachineFile {
+            path: name.to_string(),
+            size,
+            is_directory: is_dir,
+        });
+        git2::TreeWalkResult::Ok
+    }).map_err(|e| format!("遍历树失败: {}", e))?;
+
+    Ok(TimeMachineSnapshot {
+        commit_hash,
+        author: author_name,
+        time: timestamp_str,
+        message,
+        files,
+    })
+}
+
+// ====================
+// 文件选择，自定义背景图
+// ====================
+
+#[tauri::command]
+fn pick_background_image() -> Result<String, String> {
+    use std::process::Command;
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(r#"set filePath to POSIX path of (choose file of type {"public.image"} with prompt "选择背景图片")"#)
+        .output()
+        .map_err(|e| format!("无法打开文件选择器: {}", e))?;
+    if output.status.success() {
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if path.is_empty() {
+            return Err("未选择文件".into());
+        }
+        let data = std::fs::read(&path).map_err(|e| format!("读取文件失败: {}", e))?;
+        use base64::{Engine as _, engine::general_purpose::STANDARD};
+        Ok(STANDARD.encode(&data))
+    } else {
+        Err("用户取消了选择".into())
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -1677,6 +1797,9 @@ fn main() {
             export_report_markdown,
             list_scripts,
             run_script,
+            get_time_machine_snapshot,
+            get_file_content_at_commit,
+            pick_background_image,
             git_query
         ])
         .run(tauri::generate_context!())

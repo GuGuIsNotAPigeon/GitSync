@@ -1,5 +1,5 @@
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif;color:#c8d6e5;min-height:100vh;overflow:hidden;text-shadow:0 1px 2px rgba(0,0,0,0.5)}
+body{font-family:'Inter','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif;background:#0a0a14;color:#c8d6e5;min-height:100vh;overflow:hidden;text-shadow:0 1px 2px rgba(0,0,0,0.5)}
 
 /* 应用布局 */
 .app{position:relative;z-index:1;display:grid;grid-template-columns:280px 1fr;grid-template-rows:56px 1fr;height:100vh;gap:0}
@@ -42,8 +42,8 @@ body{font-family:'Inter','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-ser
 /* 动态鼠标光斑 - 全局跟踪 */
 .pointer-glow{position:fixed;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(91,155,213,0.15),transparent);pointer-events:none;z-index:0;transform:translate(-50%,-50%);transition:left 0.1s ease-out, top 0.1s ease-out}
 
-/* 手电筒效果保留在卡片上 */
-.torch-glow{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;border-radius:14px;background:radial-gradient(circle 100px at var(--torch-x, 50%) var(--torch-y, 50%), rgba(91,155,213,0.08), transparent);opacity:0;transition:opacity 0.2s}
+/* 手电筒效果（范围由 CSS 变量控制） */
+.torch-glow{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;border-radius:14px;background:radial-gradient(circle var(--torch-radius, 300px) at var(--torch-x, 50%) var(--torch-y, 50%), rgba(91,155,213,0.08), transparent);opacity:0;transition:opacity 0.2s}
 .commit-item:hover .torch-glow{opacity:1}
 
 /* 涟漪 */
@@ -79,6 +79,7 @@ body{font-family:'Inter','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-ser
 .file-status-R{background:rgba(156,39,176,0.2);color:#9c27b0}
 .file-path{color:#dfe6e9}
 .diff-content{font-family:'SF Mono','Fira Code',monospace;font-size:12px;line-height:1.6;padding:12px 14px;overflow-x:auto;white-space:pre;color:rgba(255,255,255,0.7)}
+
 /* 操作按钮 */
 .detail-action-btn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#c8d6e5;border-radius:6px;padding:2px 8px;cursor:pointer;transition:all 0.2s;display:inline-flex;align-items:center}
 .detail-action-btn:hover{background:rgba(91,155,213,0.15);border-color:rgba(91,155,213,0.3);color:#5B9BD5}
@@ -99,6 +100,7 @@ body{font-family:'Inter','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-ser
 .timeline-entry{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.03)}
 .timeline-entry-header{display:flex;align-items:center;gap:12px;margin-bottom:6px}
 
+/* 面板通用样式 */
 .analysis-panel {
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.06);
@@ -131,6 +133,7 @@ body{font-family:'Inter','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-ser
   border-bottom: 1px solid rgba(255,255,255,0.04);
 }
 
+/* 侧边栏折叠面板标题 */
 .section-header {
   display: flex;
   align-items: center;
@@ -147,6 +150,7 @@ body{font-family:'Inter','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-ser
   margin-bottom: 0;
 }
 
+/* SQL 查询表格 */
 .query-table {
   width: 100%;
   border-collapse: collapse;
