@@ -36,7 +36,7 @@
 - **插件脚本扩展系统** ：自定义脚本放入 `~/.git-tool/scripts/` 即可运行
 - **侧边栏折叠面板** ：功能分组管理，按需展开
 - **Git Hooks 管理器**：浏览、编辑、保存 Git Hook 脚本
-- **主题切换**：深色 / 浅色 / 柔和色模式
+- **UI管理**：深色 / 浅色 / 柔和色模式主题切换，自定义背景，手电筒大小调整等等
 
 ### 搜索与导出
 - **提交筛选**：按作者、日期、文件路径过滤
@@ -63,13 +63,13 @@
 
 ### macOS
 
-- [GitSync_0.2.2_aarch64.dmg](https://github.com/Wojusensei/GitSync/releases/download/v0.2.2/GitSync_0.2.2_aarch64.dmg)
+- [GitSync_0.2.3_aarch64.dmg](https://github.com/Wojusensei/GitSync/releases/download/v0.2.3/GitSync_0.2.3_aarch64.dmg)
 
 双击 `.dmg` 文件，将 GitSync 拖入 **Applications** 文件夹即可完成安装。
 
 ### Windows
 
-- [GitSync_0.2.2_x64-setup.exe](https://github.com/Wojusensei/GitSync/releases/download/v0.2.2/GitSync_0.2.2_x64-setup.exe)
+- [GitSync_0.2.3_x64-setup.exe](https://github.com/Wojusensei/GitSync/releases/download/v0.2.3/GitSync_0.2.3_x64-setup.exe)
 
 双击 `.exe` 安装程序，按提示完成安装。
 
