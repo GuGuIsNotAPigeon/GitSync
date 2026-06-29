@@ -18,6 +18,7 @@
 - **并排对比**：任意两个提交的代码并排比较
 - **语义代码搜索**：在所有历史变更中搜索代码内容
 - **差异对比工具**：快速对比两个提交或分支的差异
+- **代码审查**：需要提交哈希值
 
 ### 仓库分析
 - **仓库健康报告**：扫描大文件、废弃分支、合并冲突
@@ -63,13 +64,13 @@
 
 ### macOS
 
-- [GitSync_0.2.3_aarch64.dmg](https://github.com/Wojusensei/GitSync/releases/download/v0.2.3/GitSync_0.2.3_aarch64.dmg)
+- [GitSync_0.2.3_aarch64.dmg](https://github.com/Wojusensei/GitSync/releases/download/v0.2.4/GitSync_0.2.4_aarch64.dmg)
 
 双击 `.dmg` 文件，将 GitSync 拖入 **Applications** 文件夹即可完成安装。
 
 ### Windows
 
-- [GitSync_0.2.3_x64-setup.exe](https://github.com/Wojusensei/GitSync/releases/download/v0.2.3/GitSync_0.2.3_x64-setup.exe)
+- [GitSync_0.2.3_x64-setup.exe](https://github.com/Wojusensei/GitSync/releases/download/v0.2.4/GitSync_0.2.4_x64-setup.exe)
 
 双击 `.exe` 安装程序，按提示完成安装。
 
