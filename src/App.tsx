@@ -507,7 +507,22 @@ function App() {
                 const isSelected = selectedCommit === c.hash;
                 return (
                   <div key={c.hash} style={{ display: 'flex', flexDirection: 'column' }}>
-                    <motion.div className={`commit-item ${isSelected ? 'selected' : ''}`} onClick={() => handleCommitClick(c.hash)} onMouseMove={handleMouseMove} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ delay: Math.min(index * 0.004, 0.12), duration: 0.25, type: 'spring', stiffness: 150 }} drag="y" dragConstraints={dragConstraintRef} dragElastic={0.2} onDragEnd={(_, info) => handleDragEnd(index, info)} whileHover={{ scale: 1.03, boxShadow: '0 16px 40px rgba(0,0,0,0.6)', rotateX: 1, rotateY: -1 }} whileTap={{ scale: 0.97 }} style={{ position: 'relative', transformStyle: 'preserve-3d' }}>
+                    <motion.div
+                      className={`commit-item ${isSelected ? 'selected' : ''}`}
+                      onClick={() => handleCommitClick(c.hash)}
+                      onMouseMove={handleMouseMove}
+                      initial={index < 20 ? { opacity: 0, x: -20 } : undefined}
+                      animate={index < 20 ? { opacity: 1, x: 0 } : undefined}
+                      exit={index < 20 ? { opacity: 0, x: 20 } : undefined}
+                      transition={index < 20 ? { delay: Math.min(index * 0.004, 0.12), duration: 0.25, type: 'spring', stiffness: 150 } : undefined}
+                      drag="y"
+                      dragConstraints={dragConstraintRef}
+                      dragElastic={0.2}
+                      onDragEnd={(_, info) => handleDragEnd(index, info)}
+                      whileHover={{ scale: 1.02, boxShadow: '0 12px 30px rgba(0,0,0,0.5)', rotateX: 1, rotateY: -1 }}
+                      whileTap={{ scale: 0.98 }}
+                      style={{ position: 'relative', transformStyle: 'preserve-3d' }}
+                    >
                       <div className="torch-glow" />
                       <div className="commit-header"><span className="hash">{c.hash.substring(0, 8)}</span><span className="author">{c.author}</span><span className="time">{c.time}</span></div>
                       <div className="message">{c.message}</div>
