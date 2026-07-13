@@ -1771,21 +1771,54 @@ fn add_safe_directory(path: String) -> Result<String, String> {
 #[tauri::command]
 fn pick_background_image() -> Result<String, String> {
     use std::process::Command;
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg(r#"set filePath to POSIX path of (choose file of type {"public.image"} with prompt "选择背景图片")"#)
-        .output()
-        .map_err(|e| format!("无法打开文件选择器: {}", e))?;
-    if output.status.success() {
-        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if path.is_empty() {
-            return Err("未选择文件".into());
+
+    #[cfg(target_os = "windows")]
+    {
+        let script = r#"
+            Add-Type -AssemblyName System.Windows.Forms;
+            $FileBrowser = New-Object System.Windows.Forms.OpenFileDialog;
+            $FileBrowser.Filter = 'Image Files (*.jpg;*.jpeg;*.png;*.webp)|*.jpg;*.jpeg;*.png;*.webp';
+            $FileBrowser.Title = '选择背景图片';
+            $Show = $FileBrowser.ShowDialog();
+            if ($Show -eq 'OK') { $FileBrowser.FileName }
+        "#;
+        let output = Command::new("powershell")
+            .arg("-Command")
+            .arg(script)
+            .output()
+            .map_err(|e| format!("无法打开文件选择器: {}", e))?;
+
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if path.is_empty() {
+                return Err("未选择文件".into());
+            }
+            let data = std::fs::read(&path).map_err(|e| format!("读取文件失败: {}", e))?;
+            use base64::{Engine as _, engine::general_purpose::STANDARD};
+            Ok(STANDARD.encode(&data))
+        } else {
+            Err("用户取消了选择".into())
         }
-        let data = std::fs::read(&path).map_err(|e| format!("读取文件失败: {}", e))?;
-        use base64::{Engine as _, engine::general_purpose::STANDARD};
-        Ok(STANDARD.encode(&data))
-    } else {
-        Err("用户取消了选择".into())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("osascript")
+            .arg("-e")
+            .arg(r#"set filePath to POSIX path of (choose file of type {"public.image"} with prompt "选择背景图片")"#)
+            .output()
+            .map_err(|e| format!("无法打开文件选择器: {}", e))?;
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if path.is_empty() {
+                return Err("未选择文件".into());
+            }
+            let data = std::fs::read(&path).map_err(|e| format!("读取文件失败: {}", e))?;
+            use base64::{Engine as _, engine::general_purpose::STANDARD};
+            Ok(STANDARD.encode(&data))
+        } else {
+            Err("用户取消了选择".into())
+        }
     }
 }
 
