@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-14
             target: aarch64-apple-darwin
             name: macos
           - os: windows-latest
@@ -29,7 +29,7 @@ jobs:
         with:
           node-version: 20
 
-      - uses: actions/setup-rust@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{ matrix.target }}
 
