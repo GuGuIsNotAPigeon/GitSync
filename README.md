@@ -63,13 +63,13 @@
 
 ### macOS
 
-[GitSync_0.3.0_aarch64.dmg](https://github.com/Wojusensei/GitSync/releases/download/v0.3.0/GitSync_0.3.0_aarch64.dmg)
+[GitSync_0.3.1_aarch64.dmg](https://github.com/Wojusensei/GitSync/releases/download/v0.3.1/GitSync_0.3.1_aarch64.dmg)
 
 双击 `.dmg` 文件，将 GitSync 拖入 **Applications** 文件夹即可完成安装。
 
 ### Windows
 
-[GitSync_0.3.0_x64-setup.exe](https://github.com/Wojusensei/GitSync/releases/download/v0.3.0/GitSync_0.3.0_x64-setup.exe)
+[GitSync_0.3.1_x64-setup.exe](https://github.com/Wojusensei/GitSync/releases/download/v0.3.1/GitSync_0.3.1_x64-setup.exe)
 
 双击 `.exe` 安装程序，按提示完成安装。
 
