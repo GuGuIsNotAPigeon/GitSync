@@ -77,8 +77,6 @@
 
 [GitSync_0.3.1_amd64.deb](https://github.com/Wojusensei/GitSync/releases/download/v0.3.1/GitSync_0.3.1_amd64.deb)
 
-### Linux (Debian / Ubuntu)
-
 ```bash
 sudo dpkg -i GitSync_0.3.1_amd64.deb
 ```
@@ -90,6 +88,10 @@ sudo dpkg -i GitSync_0.3.1_amd64.deb
 ```bash
 sudo rpm -ivh GitSync-0.3.1-1.x86_64.rpm
 ```
+
+### Arch Linux
+
+- 目前官方提供的 Linux 安装包为 `.deb`（Debian/Ubuntu）和 `.rpm`（Fedora/RHEL），这两类包可以通过 `debtap` 工具在 Arch 系统中转换为可安装的格式。
 
 ## 🚀 使用
 
