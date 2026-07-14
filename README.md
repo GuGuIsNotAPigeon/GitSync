@@ -73,6 +73,24 @@
 
 双击 `.exe` 安装程序，按提示完成安装。
 
+### Linux (Debian / Ubuntu)
+
+[GitSync_0.3.1_amd64.deb](https://github.com/Wojusensei/GitSync/releases/download/v0.3.1/GitSync_0.3.1_amd64.deb)
+
+### Linux (Debian / Ubuntu)
+
+```bash
+sudo dpkg -i GitSync_0.3.1_amd64.deb
+```
+
+### Linux (Fedora / RHEL)
+
+[GitSync-0.3.1-1.x86_64.rpm](https://github.com/Wojusensei/GitSync/releases/download/v0.3.1/GitSync-0.3.1-1.x86_64.rpm)
+
+```bash
+sudo rpm -ivh GitSync-0.3.1-1.x86_64.rpm
+```
+
 ## 🚀 使用
 
 1. 启动 GitSync
