@@ -1123,14 +1123,14 @@ fn parse_hunk_header(header: &str) -> (usize, usize, usize, usize) {
 }
 
 #[tauri::command]
-fn get_commits_paginated(path: String, page: usize, page_size: usize) -> Result<(Vec<Commit>, usize), String> {
+fn get_commits_paginated(path: String, page: usize, pageSize: usize) -> Result<(Vec<Commit>, usize), String> {
     let all = get_commits(path)?;
     let total = all.len();
-    let start = page * page_size;
+    let start = page * pageSize;
     if start >= total {
         return Ok((vec![], total));
     }
-    let end = (start + page_size).min(total);
+    let end = (start + pageSize).min(total);
     let page_data = all[start..end].to_vec();
     Ok((page_data, total))
 }
