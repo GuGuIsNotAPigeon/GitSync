@@ -88,6 +88,13 @@ sudo dpkg -i GitSync_0.3.1_amd64.deb
 ```bash
 sudo rpm -ivh GitSync-0.3.1-1.x86_64.rpm
 ```
+### Linux 通用 (.tar.gz)
+
+[GitSync-0.3.1-linux-x86_64.tar.gz](https://github.com/Wojusensei/GitSync/releases/download/v0.3.1/GitSync-0.3.1-linux-x86_64.tar.gz)
+
+```bash
+sudo mkdir -p /opt/gitsync && sudo tar -xzvf GitSync-0.3.1-linux-x86_64.tar.gz -C /opt/gitsync && sudo ln -sf /opt/gitsync/git-tool /usr/local/bin/gitsync
+```
 
 ### Arch Linux
 
