@@ -31,7 +31,7 @@ jobs:
       shell: bash
       run: |
         if [ "$RUNNER_OS" = "Windows" ]; then PY=python; else PY=python3; fi
-        list=$(find src-tauri/target/release/bundle -type f -exec basename {} \;)
+        list=$(find src-tauri/target/release/bundle -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.pkg' \) -exec basename {} \; | sort -u)
         json=$(echo "$list" | $PY -c 'import json,sys; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')
         echo "files=$json" >> "$GITHUB_OUTPUT"
     - uses: actions/upload-artifact@v4
