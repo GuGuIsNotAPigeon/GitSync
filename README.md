@@ -125,6 +125,24 @@ tar -xzvf GitSync-0.3.2-linux-x86_64.tar.gz
 6. 点击提交可查看详情，点击文件旁的按钮可查看 Blame 或时间线
 7. 按 `Cmd/Ctrl + K` 打开命令面板，可快速调用任何功能
 
+## 🧪 本地开发与测试
+
+- 开发时先确认当前分支为 `main`，再运行 `npm run tauri dev`。
+- 测试分支切换时，不要用 GitSync 打开 GitSync 自己的源码目录。点击分支会把源码仓库切到另一个分支，Tauri 会立即用该分支重新编译，当前运行版本可能变成没有新命令的旧代码。
+- 建议准备一个独立测试仓库，例如 `git clone <任意仓库> /tmp/gitsync-test`，再用 GitSync 加载 `/tmp/gitsync-test` 来测试。
+
+## ❓ 常见问题
+
+### 点击分支提示 `Command checkout_branch not found`
+
+这不是当前 `main` 版本的分支切换代码问题，通常说明本地开发版正在运行旧分支或旧构建。最常见原因是上面提到的“用 GitSync 打开了自己的源码目录并切换分支”。
+
+解决方法：
+
+1. 在 GitSync 源码目录执行 `git checkout main`
+2. 重新运行 `npm run tauri dev`
+3. 使用独立的测试仓库加载，再验证分支切换
+
 ## 🛠 技术栈
 
 - **后端**：Rust (git2, serde, chrono, tauri-plugin-dialog)
