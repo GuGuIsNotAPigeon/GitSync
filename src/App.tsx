@@ -311,13 +311,31 @@ function App() {
   };
 
   const switchBranch = useCallback(async (branchName: string) => {
-    setActiveBranch(branchName);
-    setHasMore(true);
-    setCommits([]);
-    setSelectedCommit(null);
-    setCommitDetail(null);
-    await loadCommitsPage(0, true);
-  }, [loadCommitsPage]);
+    if (branchName === activeBranch) return;
+    const previousBranch = activeBranch;
+    let checkoutSucceeded = false;
+    setLoading(true);
+    setError('');
+    try {
+      await invoke('checkout_branch', { path: repoPath, branchName });
+      checkoutSucceeded = true;
+      setActiveBranch(branchName);
+      setHasMore(true);
+      setCommits([]);
+      setSelectedCommit(null);
+      setCommitDetail(null);
+      setToast(`已切换到 ${branchName}`);
+      await loadCommitsPage(0, true);
+    } catch (e: any) {
+      if (!checkoutSucceeded) {
+        setActiveBranch(previousBranch);
+      }
+      setError(String(e));
+      setToast('切换分支失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [repoPath, activeBranch, loadCommitsPage]);
 
   const openFolder = async () => {
     try {

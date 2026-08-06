@@ -92,6 +92,9 @@ fn get_branches(path: String) -> Result<Vec<Branch>, String> {
         let (branch, _) = branch.map_err(|e| format!("分支错误: {}", e))?;
         let opt_name = branch.name().map_err(|e| format!("分支名错误: {}", e))?;
         let name = opt_name.unwrap_or("未知").to_string();
+        if name == "HEAD" || name.ends_with("/HEAD") {
+            continue;
+        }
         let is_head = head_name.as_deref() == Some(&name);
         result.push(Branch { name, is_head });
     }
@@ -99,6 +102,60 @@ fn get_branches(path: String) -> Result<Vec<Branch>, String> {
     result.sort_by(|a, b| b.is_head.cmp(&a.is_head));
 
     Ok(result)
+}
+
+fn resolve_switch_target(repo: &Repository, branch_name: &str) -> (String, bool) {
+    if repo.find_branch(branch_name, git2::BranchType::Local).is_ok() {
+        return (branch_name.to_string(), false);
+    }
+
+    if let Ok(remotes) = repo.remotes() {
+        for remote in remotes.iter() {
+            if let Ok(Some(remote_name)) = remote {
+                if let Some(local_name) = branch_name.strip_prefix(&format!("{}/", remote_name)) {
+                    let track = repo.find_branch(local_name, git2::BranchType::Local).is_err();
+                    return (local_name.to_string(), track);
+                }
+            }
+        }
+    }
+    (branch_name.to_string(), false)
+}
+
+#[tauri::command]
+fn checkout_branch(path: String, branch_name: String) -> Result<(), String> {
+    let expanded = shellexpand::tilde(&path).to_string();
+    let repo = Repository::open(Path::new(&expanded))
+        .map_err(|e| format!("无法打开仓库: {}", e))?;
+
+    let is_current = repo
+        .head()
+        .ok()
+        .and_then(|head| head.shorthand().ok().map(|s| s.to_string()))
+        .map(|name| name == branch_name)
+        .unwrap_or(false);
+    if is_current {
+        return Ok(());
+    }
+
+    let (target, track) = resolve_switch_target(&repo, &branch_name);
+
+    let mut git = std::process::Command::new("git");
+    git.current_dir(&expanded).arg("switch");
+    if track {
+        git.arg("--track");
+    }
+    git.arg(&target);
+
+    let output = git.output().map_err(|e| format!("执行 git switch 失败: {}", e))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let message = if stderr.trim().is_empty() { stdout } else { stderr };
+        return Err(message.trim().to_string());
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -1856,6 +1913,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_commits,
             get_branches,
+            checkout_branch,
             get_commit_detail,
             search_commits,
             get_blame,
