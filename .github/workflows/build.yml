@@ -25,13 +25,18 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: swatinem/rust-cache@v2
     - run: npm ci
-    - run: npm run tauri build
+    - run: npm run tauri build -- --ci
+    - name: Package tar.gz (Linux)
+      run: |
+        cd src-tauri/target/release
+        VERSION=$(node -p "require('./package.json').version")
+        tar -czf "bundle/GitSync-${VERSION}-linux-$(uname -m).tar.gz" GitSync
     - name: Collect installers
       id: files
       shell: bash
       run: |
         if [ "$RUNNER_OS" = "Windows" ]; then PY=python; else PY=python3; fi
-        list=$(find src-tauri/target/release/bundle -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.pkg' \) -exec basename {} \; | sort -u)
+        list=$(find src-tauri/target/release/bundle -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.tar.gz' -o -name '*.AppImage' -o -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.pkg' \) -exec basename {} \; | sort -u)
         json=$(echo "$list" | $PY -c 'import json,sys; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')
         echo "files=$json" >> "$GITHUB_OUTPUT"
     - uses: actions/upload-artifact@v4
@@ -72,7 +77,7 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: swatinem/rust-cache@v2
     - run: npm ci
-    - run: npm run tauri build
+    - run: npm run tauri build -- --ci
     - name: Collect installers
       id: files
       shell: bash
@@ -119,7 +124,21 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: swatinem/rust-cache@v2
     - run: npm ci
-    - run: npm run tauri build
+    - run: npm run tauri build -- --ci --bundles app
+    - name: Build dmg
+      shell: bash
+      run: |
+        set -euo pipefail
+        VERSION=$(node -p "require('./package.json').version")
+        ARCH=$(uname -m)
+        if [ "$ARCH" = "arm64" ]; then ARCH="aarch64"; fi
+        cd src-tauri/target/release/bundle/macos
+        STAGING=$(mktemp -d)
+        ditto GitSync.app "$STAGING/GitSync.app"
+        ln -s /Applications "$STAGING/Applications"
+        mkdir -p ../dmg
+        hdiutil create -volname GitSync -srcfolder "$STAGING" -ov -format UDZO -imagekey zlib-level=9 "../dmg/GitSync_${VERSION}_${ARCH}.dmg"
+        rm -rf "$STAGING"
     - name: Collect installers
       id: files
       shell: bash
@@ -152,4 +171,3 @@ jobs:
         name: ${{ matrix.file }}
         path: ${{ matrix.file }}
         if-no-files-found: error
-
