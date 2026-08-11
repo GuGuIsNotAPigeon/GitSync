@@ -28,8 +28,8 @@ jobs:
     - run: npm run tauri build -- --ci
     - name: Package tar.gz (Linux)
       run: |
-        cd src-tauri/target/release
         VERSION=$(node -p "require('./package.json').version")
+        cd src-tauri/target/release
         tar -czf "bundle/GitSync-${VERSION}-linux-$(uname -m).tar.gz" GitSync
     - name: Collect installers
       id: files
