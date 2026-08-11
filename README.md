@@ -81,7 +81,7 @@
 
 ### Linux (通用 tar.gz)
 
-[GitSync-0.3.2-linux-x86_64.tar.gz](https://github.com/Wojusensei/GitSync/releases/download/v0.3.2/GitSync-0.3.2-linux-x86_64.tar.gz)
+[GitSync-0.3.2-linux-x86_64.tar.gz.zip](https://github.com/Wojusensei/GitSync/releases/download/v0.3.2/GitSync-0.3.2-linux-x86_64.tar.gz.zip)
 
 
 ### Arch Linux
