@@ -83,10 +83,9 @@
 
 [GitSync-0.3.2-linux-x86_64.tar.gz.zip](https://github.com/Wojusensei/GitSync/releases/download/v0.3.2/GitSync-0.3.2-linux-x86_64.tar.gz.zip)
 
-
 ### Arch Linux
 
-- 目前官方提供的 Linux 安装包为 `.deb`（Debian/Ubuntu）和 `.rpm`（Fedora/RHEL），这两类包可以通过 `debtap` 工具在 Arch 系统中转换为可安装的格式。
+[gitsync-0.3.2-1-x86_64.pkg.tar.zst](https://github.com/Wojusensei/GitSync/releases/download/v0.3.2/gitsync-0.3.2-1-x86_64.pkg.tar.zst)
 
 ## 😋 安装
 
@@ -108,6 +107,12 @@ sudo dpkg -i GitSync_0.3.2_amd64.deb
 
 ```bash
 sudo rpm -ivh GitSync-0.3.2-1.x86_64.rpm
+```
+
+### Arch Linux
+
+```bash
+sudo pacman -U gitsync-0.3.2-1-x86_64.pkg.tar.zst
 ```
 
 ## Linux 通用 tar.gz
@@ -155,10 +160,6 @@ tar -xzvf GitSync-0.3.2-linux-x86_64.tar.gz
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request。请确保代码符合项目风格，并在提交前运行 `cargo clippy` 和 `npm run build` 检查。欢迎所有用户开发插件，未来或将对插件进行统一管理（插件数量够多的情况下）。特别的，有任何使用上的意见请提交 Issue，目前项目已经基本完善，更新速度相较于开发期会减慢。
-
-如果你希望 GitSync 提供官方 Arch Linux 包，欢迎贡献 PKGBUILD 脚本。你可以：
-- 在 AUR 上维护 GitSync 包
-- 将 PKGBUILD 提交到本仓库，我们会在后续版本中将其纳入发布流程
 
 ## 📄 开源协议
 
