@@ -12,6 +12,7 @@ interface RebaseCommit {
 interface RebaseOperation {
   hash: string;
   action: string;
+  message: string;
   new_message?: string;
 }
 
@@ -23,7 +24,7 @@ export default function EnhancedRebase({ repoPath, onComplete }: { repoPath: str
   const load = async () => {
     try {
       const res = await invokeTauri<RebaseCommit[]>('get_rebase_commits', { path: repoPath, count: 20 });
-      setOps(res.map(c => ({ hash: c.hash, action: 'pick' })));
+      setOps(res.map(c => ({ hash: c.hash, action: 'pick', message: c.message })));
     } catch (e) { console.error(e); }
   };
 
@@ -51,6 +52,18 @@ export default function EnhancedRebase({ repoPath, onComplete }: { repoPath: str
                 <option value="drop">drop</option>
                 <option value="reword">reword</option>
               </select>
+              {op.action === 'reword' && (
+                <input
+                  className="rebase-message-input"
+                  value={op.new_message ?? op.message}
+                  placeholder={op.message}
+                  onChange={(e) => {
+                    const newOps = [...ops];
+                    newOps[idx].new_message = e.target.value;
+                    setOps(newOps);
+                  }}
+                />
+              )}
             </div>
           </Reorder.Item>
         ))}

@@ -151,6 +151,23 @@ body{font-family:'Inter','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-ser
   padding: 10px 0;
   border-bottom: 1px solid rgba(255,255,255,0.04);
 }
+.rebase-message-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.25);
+  color: rgba(255,255,255,0.9);
+  font-size: 12px;
+}
+.rebase-message-input::placeholder {
+  color: rgba(255,255,255,0.4);
+}
+.rebase-message-input:focus {
+  outline: none;
+  border-color: rgba(91,155,213,0.6);
+}
 
 /* 侧边栏折叠面板标题 */
 .section-header {
@@ -572,4 +589,4 @@ input[type="range"]::-moz-range-thumb:hover {
 
 .file-view-tr:hover {
   background: rgba(255, 255, 255, 0.05);
-}
+}
