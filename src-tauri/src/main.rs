@@ -140,14 +140,27 @@ fn checkout_branch(path: String, branch_name: String) -> Result<(), String> {
 
     let (target, track) = resolve_switch_target(&repo, &branch_name);
 
-    if track {
+    let commit = if track {
         let remote = repo
             .find_branch(&branch_name, git2::BranchType::Remote)
             .map_err(|e| format!("找不到远程分支 {}: {}", branch_name, e))?;
-        let commit = remote
+        remote
             .get()
             .peel_to_commit()
-            .map_err(|e| format!("无法解析远程分支: {}", e))?;
+            .map_err(|e| format!("无法解析远程分支: {}", e))?
+    } else {
+        repo.find_branch(&target, git2::BranchType::Local)
+            .map_err(|e| format!("找不到本地分支 {}: {}", target, e))?
+            .get()
+            .peel_to_commit()
+            .map_err(|e| format!("无法解析分支: {}", e))?
+    };
+
+    // 先更新工作区，成功后再移动 HEAD，避免失败时分支与工作区不一致
+    repo.checkout_tree(&commit.as_object(), Some(&mut git2::build::CheckoutBuilder::default()))
+        .map_err(|e| format!("切换分支失败: {}", e))?;
+
+    if track {
         let mut local = repo
             .branch(&target, &commit, false)
             .map_err(|e| format!("创建本地分支失败: {}", e))?;
@@ -158,8 +171,6 @@ fn checkout_branch(path: String, branch_name: String) -> Result<(), String> {
 
     repo.set_head(&format!("refs/heads/{}", target))
         .map_err(|e| format!("设置 HEAD 失败: {}", e))?;
-    repo.checkout_head(Some(&mut git2::build::CheckoutBuilder::default()))
-        .map_err(|e| format!("切换分支失败: {}", e))?;
 
     Ok(())
 }
