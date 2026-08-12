@@ -1,0 +1,42 @@
+pkgname=gitsync
+pkgver=0.3.2
+pkgrel=1
+pkgdesc="交互式 Git 历史浏览器，可视化提交图、分支、差异对比、Blame 等，帮助开发者更直观地理解和管理 Git 仓库"
+arch=('x86_64')
+url="https://github.com/Wojusensei/GitSync"
+license=('MIT')
+
+depends=(
+    'gtk3'
+    'webkit2gtk-4.1'
+)
+
+source=(
+    "GitSync"
+    "gitsync.desktop"
+    "icon.png"
+)
+# 使用makepkg -g生成完整性检查值
+sha256sums=(
+    'SKIP'
+    'SKIP'
+    'SKIP'
+)
+
+package() {
+
+    # 主程序
+    install -Dm755 \
+        "$srcdir/GitSync" \
+        "$pkgdir/usr/bin/gitsync"
+
+    # desktop 文件
+    install -Dm644 \
+        "$srcdir/gitsync.desktop" \
+        "$pkgdir/usr/share/applications/gitsync.desktop"
+
+    # 图标
+    install -Dm644 \
+        "$srcdir/icon.png" \
+        "$pkgdir/usr/share/icons/hicolor/128x128/apps/gitsync.png"
+}
