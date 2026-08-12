@@ -140,20 +140,37 @@ fn checkout_branch(path: String, branch_name: String) -> Result<(), String> {
 
     let (target, track) = resolve_switch_target(&repo, &branch_name);
 
-    let mut git = std::process::Command::new("git");
-    git.current_dir(&expanded).arg("switch");
-    if track {
-        git.arg("--track");
-    }
-    git.arg(&target);
+    let commit = if track {
+        let remote = repo
+            .find_branch(&branch_name, git2::BranchType::Remote)
+            .map_err(|e| format!("找不到远程分支 {}: {}", branch_name, e))?;
+        remote
+            .get()
+            .peel_to_commit()
+            .map_err(|e| format!("无法解析远程分支: {}", e))?
+    } else {
+        repo.find_branch(&target, git2::BranchType::Local)
+            .map_err(|e| format!("找不到本地分支 {}: {}", target, e))?
+            .get()
+            .peel_to_commit()
+            .map_err(|e| format!("无法解析分支: {}", e))?
+    };
 
-    let output = git.output().map_err(|e| format!("执行 git switch 失败: {}", e))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let message = if stderr.trim().is_empty() { stdout } else { stderr };
-        return Err(message.trim().to_string());
+    // 先更新工作区，成功后再移动 HEAD，避免失败时分支与工作区不一致
+    repo.checkout_tree(&commit.as_object(), Some(&mut git2::build::CheckoutBuilder::default()))
+        .map_err(|e| format!("切换分支失败: {}", e))?;
+
+    if track {
+        let mut local = repo
+            .branch(&target, &commit, false)
+            .map_err(|e| format!("创建本地分支失败: {}", e))?;
+        local
+            .set_upstream(Some(&branch_name))
+            .map_err(|e| format!("设置上游失败: {}", e))?;
     }
+
+    repo.set_head(&format!("refs/heads/{}", target))
+        .map_err(|e| format!("设置 HEAD 失败: {}", e))?;
 
     Ok(())
 }
@@ -472,6 +489,7 @@ fn get_health_report(path: String) -> Result<HealthReport, String> {
 #[derive(Serialize)]
 struct Contributor {
     author: String,
+    email: String,
     commits: usize,
     additions: usize,
     deletions: usize,
@@ -487,15 +505,18 @@ fn get_contributors(path: String) -> Result<Vec<Contributor>, String> {
     revwalk.push_head().map_err(|e| format!("无法推送 HEAD: {}", e))?;
     revwalk.set_sorting(Sort::TIME).map_err(|e| format!("无法设置排序: {}", e))?;
 
-    let mut contributors: std::collections::HashMap<String, (usize, usize, usize)> = std::collections::HashMap::new();
+    let mut contributors: std::collections::HashMap<String, (String, usize, usize, usize)> = std::collections::HashMap::new();
 
     for oid in revwalk {
         let oid = oid.map_err(|e| format!("遍历失败: {}", e))?;
         let commit = repo.find_commit(oid).map_err(|e| format!("找不到提交: {}", e))?;
         let author = commit.author().name().unwrap_or("未知").to_string();
+        let email = commit.author().email().unwrap_or("").to_string();
 
-        let entry = contributors.entry(author).or_insert((0, 0, 0));
-        entry.0 += 1;
+        let entry = contributors
+            .entry(author)
+            .or_insert((email, 0, 0, 0));
+        entry.1 += 1;
 
         if let Ok(tree) = commit.tree() {
             let parent_tree = commit.parents().next().and_then(|p| p.tree().ok());
@@ -506,8 +527,8 @@ fn get_contributors(path: String) -> Result<Vec<Contributor>, String> {
                     None,
                     Some(&mut |_delta, _hunk, line| {
                         match line.origin() {
-                            '+' => entry.1 += 1,
-                            '-' => entry.2 += 1,
+                            '+' => entry.2 += 1,
+                            '-' => entry.3 += 1,
                             _ => {}
                         }
                         true
@@ -522,15 +543,17 @@ fn get_contributors(path: String) -> Result<Vec<Contributor>, String> {
         }
     }
 
-    let result: Vec<Contributor> = contributors
+    let mut result: Vec<Contributor> = contributors
         .into_iter()
-        .map(|(author, (commits, additions, deletions))| Contributor {
+        .map(|(author, (email, commits, additions, deletions))| Contributor {
             author,
+            email,
             commits,
             additions,
             deletions,
         })
         .collect();
+    result.sort_by(|a, b| b.commits.cmp(&a.commits));
 
     Ok(result)
 }
@@ -671,7 +694,6 @@ struct RebaseCommit {
 struct RebaseOperation {
     hash: String,
     action: String,
-    #[allow(dead_code)]
     new_message: Option<String>,
 }
 
@@ -694,38 +716,189 @@ fn get_rebase_commits(path: String, count: usize) -> Result<Vec<RebaseCommit>, S
 #[tauri::command]
 fn execute_rebase(path: String, operations: Vec<RebaseOperation>) -> Result<String, String> {
     let expanded = shellexpand::tilde(&path).to_string();
+    let repo = Repository::open(Path::new(&expanded))
+        .map_err(|e| format!("无法打开仓库: {}", e))?;
 
-    let mut todo_content = String::new();
+    if repo.state() != git2::RepositoryState::Clean {
+        return Err("仓库存在未完成的操作（合并/拣选等），无法 rebase".into());
+    }
+
+    let head = repo.head().map_err(|e| format!("无法读取 HEAD: {}", e))?;
+    if !head.is_branch() {
+        return Err("当前处于游离 HEAD 状态，无法 rebase".into());
+    }
+
+    if operations.is_empty() {
+        return Err("没有需要 rebase 的提交".into());
+    }
+
+    let statuses = repo
+        .statuses(None)
+        .map_err(|e| format!("无法读取仓库状态: {}", e))?;
+    for entry in statuses.iter() {
+        let dirty = entry.status().intersects(
+            git2::Status::INDEX_NEW
+                | git2::Status::INDEX_MODIFIED
+                | git2::Status::INDEX_DELETED
+                | git2::Status::INDEX_RENAMED
+                | git2::Status::INDEX_TYPECHANGE
+                | git2::Status::WT_MODIFIED
+                | git2::Status::WT_DELETED
+                | git2::Status::WT_RENAMED
+                | git2::Status::WT_TYPECHANGE
+                | git2::Status::CONFLICTED,
+        );
+        if dirty {
+            return Err("工作区有未提交的更改，无法 rebase".into());
+        }
+    }
+
+    // 定位窗口提交（newest-first）与基提交 HEAD~N
+    let head_commit = head
+        .peel_to_commit()
+        .map_err(|e| format!("无法解析 HEAD: {}", e))?;
+    let mut cur = head_commit.clone();
+    let mut window: Vec<git2::Commit> = Vec::new();
+    for _ in 0..operations.len() {
+        window.push(cur.clone());
+        cur = cur.parent(0).map_err(|_| {
+            format!("提交数量不足，无法 rebase HEAD~{}", operations.len())
+        })?;
+    }
+    let base = cur;
+
+    for c in &window {
+        if c.parent_count() > 1 {
+            return Err("无法 rebase 包含合并提交的历史".into());
+        }
+    }
+
+    let mut by_hash: HashMap<String, git2::Commit> = HashMap::new();
     for op in &operations {
-        let line = match op.action.as_str() {
-            "squash" => format!("squash {}", &op.hash[..8]),
-            "drop" => format!("drop {}", &op.hash[..8]),
-            "reword" => format!("reword {}", &op.hash[..8]),
-            _ => format!("pick {}", &op.hash[..8]),
-        };
-        todo_content.push_str(&line);
-        todo_content.push('\n');
+        let oid = Oid::from_str(&op.hash)
+            .map_err(|e| format!("无效的提交哈希 {}: {}", op.hash, e))?;
+        let found = window
+            .iter()
+            .find(|c| c.id() == oid)
+            .ok_or_else(|| format!("提交 {} 不在可 rebase 的范围内", op.hash))?;
+        by_hash.insert(op.hash.clone(), found.clone());
     }
 
-    let temp_file = format!("{}/.git-rebase-todo", expanded);
-    std::fs::write(&temp_file, todo_content).map_err(|e| format!("写入 todo 文件失败: {}", e))?;
+    let ordered: Vec<&RebaseOperation> = operations.iter().rev().collect();
 
-    let output = std::process::Command::new("git")
-        .current_dir(&expanded)
-        .env("GIT_SEQUENCE_EDITOR", format!("cat {}", temp_file))
-        .arg("rebase")
-        .arg("-i")
-        .arg(format!("HEAD~{}", operations.len()))
-        .output()
-        .map_err(|e| format!("执行 rebase 失败: {}", e))?;
+    let committer = match repo.signature() {
+        Ok(sig) => sig,
+        Err(_) => {
+            let a = head_commit.author();
+            git2::Signature::new(
+                a.name().unwrap_or("unknown"),
+                a.email().unwrap_or("unknown"),
+                &a.when(),
+            )
+            .map_err(|e| format!("无法确定提交身份: {}", e))?
+        }
+    };
 
-    std::fs::remove_file(temp_file).ok();
+    let mut current_oid = base.id();
+    let mut current_tree = base
+        .tree()
+        .map_err(|e| format!("无法读取基提交树: {}", e))?;
+    let mut pending: Vec<git2::Commit> = Vec::new();
+    let mut pending_msgs: Vec<String> = Vec::new();
 
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    for op in &ordered {
+        let commit = by_hash.get(&op.hash).unwrap();
+        match op.action.as_str() {
+            "drop" => {
+                rebase_flush(&repo, &mut current_oid, &mut current_tree, &mut pending, &mut pending_msgs, &committer)?;
+            }
+            "squash" => {
+                if pending.is_empty() {
+                    return Err("squash 前必须有一个 pick/reword 提交".into());
+                }
+                pending.push(commit.clone());
+                pending_msgs.push(commit.message().unwrap_or("").to_string());
+            }
+            _ => {
+                rebase_flush(&repo, &mut current_oid, &mut current_tree, &mut pending, &mut pending_msgs, &committer)?;
+                let message = if op.action == "reword" {
+                    op.new_message.clone().unwrap_or_else(|| {
+                        commit.message().unwrap_or("").to_string()
+                    })
+                } else {
+                    commit.message().unwrap_or("").to_string()
+                };
+                pending.push(commit.clone());
+                pending_msgs.push(message);
+            }
+        }
     }
+    rebase_flush(&repo, &mut current_oid, &mut current_tree, &mut pending, &mut pending_msgs, &committer)?;
+
+    let final_commit = repo
+        .find_commit(current_oid)
+        .map_err(|e| format!("找不到最终提交: {}", e))?;
+    repo.reset(&final_commit.as_object(), git2::ResetType::Hard, None)
+        .map_err(|e| format!("更新工作区失败: {}", e))?;
 
     Ok("rebase 成功".into())
+}
+
+fn rebase_flush<'a>(
+    repo: &'a Repository,
+    current_oid: &mut Oid,
+    current_tree: &mut git2::Tree<'a>,
+    pending: &mut Vec<git2::Commit>,
+    pending_msgs: &mut Vec<String>,
+    committer: &git2::Signature,
+) -> Result<(), String> {
+    if pending.is_empty() {
+        return Ok(());
+    }
+
+    // 将组内提交的改动依次 3-way merge 到当前树（等价于 git cherry-pick 的树级合并）
+    let mut tree = current_tree.clone();
+    for g in pending.iter() {
+        let ancestor = g
+            .parent(0)
+            .map_err(|e| format!("无法读取父提交: {}", e))?
+            .tree()
+            .map_err(|e| format!("无法读取提交树: {}", e))?;
+        let mut idx = repo
+            .merge_trees(&ancestor, &tree, &g.tree().map_err(|e| format!("无法读取提交树: {}", e))?, None)
+            .map_err(|e| format!("合并提交失败: {}", e))?;
+        if idx.has_conflicts() {
+            return Err("rebase 冲突，已回滚到原提交，请调整后重试".to_string());
+        }
+        let tree_oid = idx
+            .write_tree_to(repo)
+            .map_err(|e| format!("无法写入树: {}", e))?;
+        tree = repo
+            .find_tree(tree_oid)
+            .map_err(|e| format!("找不到树: {}", e))?;
+    }
+
+    let message = pending_msgs.join("\n\n");
+    let parent = repo
+        .find_commit(*current_oid)
+        .map_err(|e| format!("找不到父提交: {}", e))?;
+    let author = {
+        let a = pending[0].author();
+        git2::Signature::new(
+            a.name().unwrap_or("unknown"),
+            a.email().unwrap_or("unknown"),
+            &a.when(),
+        )
+        .map_err(|e| format!("创建签名失败: {}", e))?
+    };
+    let oid = repo
+        .commit(None, &author, committer, &message, &tree, &[&parent])
+        .map_err(|e| format!("创建提交失败: {}", e))?;
+    *current_oid = oid;
+    *current_tree = tree;
+    pending.clear();
+    pending_msgs.clear();
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -1180,14 +1353,14 @@ fn parse_hunk_header(header: &str) -> (usize, usize, usize, usize) {
 }
 
 #[tauri::command]
-fn get_commits_paginated(path: String, page: usize, pageSize: usize) -> Result<(Vec<Commit>, usize), String> {
+fn get_commits_paginated(path: String, page: usize, page_size: usize) -> Result<(Vec<Commit>, usize), String> {
     let all = get_commits(path)?;
     let total = all.len();
-    let start = page * pageSize;
+    let start = page * page_size;
     if start >= total {
         return Ok((vec![], total));
     }
-    let end = (start + pageSize).min(total);
+    let end = (start + page_size).min(total);
     let page_data = all[start..end].to_vec();
     Ok((page_data, total))
 }
@@ -1861,25 +2034,6 @@ fn get_time_machine_snapshot(path: String, timestamp: i64) -> Result<TimeMachine
 }
 
 #[tauri::command]
-fn add_safe_directory(path: String) -> Result<String, String> {
-    let expanded = shellexpand::tilde(&path).to_string();
-    let output = std::process::Command::new("git")
-        .arg("config")
-        .arg("--global")
-        .arg("--add")
-        .arg("safe.directory")
-        .arg(&expanded)
-        .output()
-        .map_err(|e| format!("执行 git 命令失败: {}", e))?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
-    }
-
-    Ok("成功添加安全目录".into())
-}
-
-#[tauri::command]
 async fn pick_background_image(app: tauri::AppHandle) -> Result<String, String> {
     let file_path = app.dialog().file()
         .add_filter("Images", &["png", "jpg", "jpeg", "gif", "bmp", "webp"])
@@ -1908,6 +2062,9 @@ async fn open_folder_dialog(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 fn main() {
+    unsafe {
+        let _ = git2::opts::set_verify_owner_validation(false);
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
@@ -1951,8 +2108,7 @@ fn main() {
             get_file_content,
             pick_background_image,
             open_folder_dialog,
-            git_query,
-            add_safe_directory
+            git_query
         ])
         .run(tauri::generate_context!())
         .expect("启动失败");

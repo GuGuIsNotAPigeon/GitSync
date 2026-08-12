@@ -4,7 +4,6 @@ import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motio
 import { SiGit } from 'react-icons/si';
 import { VscRepoForked, VscGitCommit, VscSourceControl, VscEmptyWindow, VscDiffAdded, VscDiffRemoved, VscSearch, VscFileCode, VscHistory, VscChevronRight, VscFolderOpened } from 'react-icons/vsc';
 import './App.css';
-import { addSafeDirectory } from './services/tauriService';
 import FeedbackOverlay from './components/FeedbackOverlay';
 import { DEFAULT_BG_BASE64 } from './assets/defaultBg';
 import { parseAndRenderDiff } from './utils/diffUtils';
@@ -31,7 +30,7 @@ import ScriptRunner from './components/ScriptRunner';
 import QueryConsole from './components/QueryConsole';
 import TimeMachine from './components/TimeMachine';
 import UIManager from './components/UIManager';
-import SafeDirectoryModal from './components/SafeDirectoryModal';
+import ContributorAvatar from './components/ContributorAvatar';
 
 interface Commit {
   hash: string;
@@ -81,6 +80,7 @@ interface HealthReport {
 
 interface Contributor {
   author: string;
+  email: string;
   commits: number;
   additions: number;
   deletions: number;
@@ -151,11 +151,6 @@ function App() {
   const springX = useSpring(pointerX, { stiffness: 200, damping: 30 });
   const springY = useSpring(pointerY, { stiffness: 200, damping: 30 });
 
-  // Safe directory state
-  const [safeDirModalPath, setSafeDirModalPath] = useState<string | null>(null);
-  const [safeDirFixing, setSafeDirFixing] = useState(false);
-  const [safeDirFixingError, setSafeDirFixingError] = useState<string | null>(null);
-
   // File changes browsing state
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'single' | 'list'>('single');
@@ -201,34 +196,6 @@ function App() {
     setSelectedTreeFile(null);
     await loadCommitsPage(0, true);
   }, [repoPath, loadCommitsPage]);
-
-  useEffect(() => {
-    if (error && error.includes("is not owned by current user")) {
-      const match = error.match(/repository path '([^']+)' is not owned by current user/);
-      if (match) {
-        setSafeDirModalPath(match[1]);
-      }
-    }
-  }, [error]);
-
-  const handleFixSafeDirectory = async () => {
-    if (!safeDirModalPath) return;
-    setSafeDirFixing(true);
-    setSafeDirFixingError(null);
-    setToast(null);
-    try {
-      await addSafeDirectory(safeDirModalPath);
-      setSafeDirModalPath(null);
-      setError('');
-      setToast('安全目录已添加，正在重新加载仓库...');
-      await loadRepo();
-    } catch (e: any) {
-      setSafeDirFixingError(String(e));
-      setToast('修复失败，请重试');
-    } finally {
-      setSafeDirFixing(false);
-    }
-  };
 
   const [activeBlame, setActiveBlame] = useState<string | null>(null);
   const [blameData, setBlameData] = useState<BlameLine[]>([]);
@@ -518,7 +485,7 @@ function App() {
       <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: -1, background: 'radial-gradient(ellipse at center, rgba(5,9,20,0.08) 0%, rgba(5,9,20,0.25) 100%)' }} />
       <motion.div className="pointer-glow" style={{ left: springX, top: springY, position: 'fixed' }} />
 
-      <FeedbackOverlay loading={loading || detailLoading || safeDirFixing} loadingText={safeDirFixing ? '修复安全目录中...' : loading || detailLoading ? '加载中...' : null} toast={toast} onToastClose={() => setToast(null)} />
+      <FeedbackOverlay loading={loading || detailLoading} loadingText={loading || detailLoading ? '加载中...' : null} toast={toast} onToastClose={() => setToast(null)} />
       <div className="app">
         <header className="topbar">
           <h1><SiGit size={22} color="#5B9BD5" /> GitSync</h1>
@@ -694,9 +661,9 @@ function App() {
                               {/* Draggable Progress Bar / Range Input for browsing files */}
                               {viewMode === 'single' && commitDetail.files.length > 1 && (
                                 <div className="file-changes-slider-container" style={{ margin: '12px 0 20px 0', padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8, color: '#dfe6e9' }}>
-                                    <span>拖拽进度浏览: <strong>{currentFileIndex + 1}</strong> / {commitDetail.files.length}</span>
-                                    <span style={{ color: '#5B9BD5', fontWeight: 600 }}>{commitDetail.files[currentFileIndex]?.path}</span>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 8, color: '#dfe6e9' }}>
+                                    <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>拖拽进度浏览: <strong>{currentFileIndex + 1}</strong> / {commitDetail.files.length}</span>
+                                    <span style={{ color: '#5B9BD5', fontWeight: 600, minWidth: 0, flex: 1, wordBreak: 'break-all', lineHeight: 1.5 }} title={commitDetail.files[currentFileIndex]?.path}>{commitDetail.files[currentFileIndex]?.path}</span>
                                   </div>
                                   <input
                                     type="range"
@@ -833,7 +800,15 @@ function App() {
           {showContributors && (
             <motion.div id="panel-contributors" className="analysis-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
               <h3>贡献者统计</h3>
-              {contributors.map(c => (<div key={c.author} className="analysis-item"><span className="hash">{c.author}</span><span className="time" style={{ float: 'right' }}>提交 {c.commits} 次，新增 {c.additions} 行，删除 {c.deletions} 行</span></div>))}
+              {contributors.map(c => (
+                <div key={c.author} className="analysis-item">
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <ContributorAvatar name={c.author} email={c.email} />
+                    <span className="hash" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.author}</span>
+                  </span>
+                  <span className="time">提交 {c.commits} 次，新增 {c.additions} 行，删除 {c.deletions} 行</span>
+                </div>
+              ))}
             </motion.div>
           )}
 
@@ -932,18 +907,6 @@ function App() {
         { id: 'timemachine', label: '时间机器', action: () => setShowTimeMachine(true) },
         { id: 'uimanager', label: 'UI 管理', action: () => setShowUIManager(true) },
       ]} />
-
-      <AnimatePresence>
-        {safeDirModalPath && (
-          <SafeDirectoryModal
-            path={safeDirModalPath}
-            fixing={safeDirFixing}
-            error={safeDirFixingError}
-            onClose={() => setSafeDirModalPath(null)}
-            onFix={handleFixSafeDirectory}
-          />
-        )}
-      </AnimatePresence>
 
       {/* <^first open welcoming&> */}
       <WelcomeModal
