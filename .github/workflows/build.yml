@@ -31,18 +31,35 @@ jobs:
         VERSION=$(node -p "require('./package.json').version")
         cd src-tauri/target/release
         tar -czf "bundle/GitSync-${VERSION}-linux-$(uname -m).tar.gz" GitSync
+    - name: Build Arch Linux package
+      run: |
+        VERSION=$(node -p "require('./package.json').version")
+        cp src-tauri/target/release/GitSync aur/
+        sed -i "s/^pkgver=.*/pkgver=$VERSION/" aur/PKGBUILD
+        docker run --rm -v "$PWD/aur:/pkg" -w /pkg archlinux:latest bash -c "
+          pacman -Syu --noconfirm base-devel
+          useradd -m builder
+          chown -R builder:builder /pkg
+          su builder -c 'makepkg -fd --noconfirm'
+        "
+        mkdir -p src-tauri/target/release/bundle/arch
+        cp aur/gitsync-*.pkg.tar.zst src-tauri/target/release/bundle/arch/
     - name: Collect installers
       id: files
       shell: bash
       run: |
         if [ "$RUNNER_OS" = "Windows" ]; then PY=python; else PY=python3; fi
-        list=$(find src-tauri/target/release/bundle -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.tar.gz' -o -name '*.AppImage' -o -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.pkg' \) -exec basename {} \; | sort -u)
+        list=$(find src-tauri/target/release/bundle -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.tar.gz' -o -name '*.pkg.tar.zst' -o -name '*.AppImage' -o -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.pkg' \) -exec basename {} \; | sort -u)
         json=$(echo "$list" | $PY -c 'import json,sys; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')
         echo "files=$json" >> "$GITHUB_OUTPUT"
     - uses: actions/upload-artifact@v4
       with:
         name: bundle-ubuntu
-        path: src-tauri/target/release/bundle
+        path: |
+          src-tauri/target/release/bundle/deb/*
+          src-tauri/target/release/bundle/rpm/*
+          src-tauri/target/release/bundle/arch/*
+          src-tauri/target/release/bundle/*.tar.gz
         if-no-files-found: error
 
   publish-ubuntu:
@@ -89,7 +106,9 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: bundle-windows
-        path: src-tauri/target/release/bundle
+        path: |
+          src-tauri/target/release/bundle/msi/*
+          src-tauri/target/release/bundle/nsis/*
         if-no-files-found: error
 
   publish-windows:
@@ -144,13 +163,15 @@ jobs:
       shell: bash
       run: |
         if [ "$RUNNER_OS" = "Windows" ]; then PY=python; else PY=python3; fi
-        list=$(find src-tauri/target/release/bundle -type f -exec basename {} \;)
+        list=$(find src-tauri/target/release/bundle -type f -name '*.dmg' -exec basename {} \; | sort -u)
         json=$(echo "$list" | $PY -c 'import json,sys; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')
         echo "files=$json" >> "$GITHUB_OUTPUT"
     - uses: actions/upload-artifact@v4
       with:
         name: bundle-macos
-        path: src-tauri/target/release/bundle
+        path: |
+          src-tauri/target/release/bundle/dmg/*
+          src-tauri/target/release/bundle/macos/*
         if-no-files-found: error
 
   publish-macos:
