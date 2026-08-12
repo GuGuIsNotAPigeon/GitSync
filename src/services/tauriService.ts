@@ -10,7 +10,3 @@ export async function invokeTauri<T>(command: string, args?: TauriCommandArgs): 
     throw new Error(message.replace(/^Error:\s*/i, '') || '未知 Tauri 调用错误');
   }
 }
-
-export async function addSafeDirectory(path: string): Promise<void> {
-  return invokeTauri<void>('add_safe_directory', { path });
-}
