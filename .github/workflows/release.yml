@@ -9,6 +9,10 @@ on:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
     strategy:
       matrix:
         include:
@@ -49,7 +53,19 @@ jobs:
 
       - name: Build Tauri app (macOS)
         if: matrix.os == 'macos-latest'
-        run: npm run tauri build -- --ci --bundles app --target ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          if [ -n "${APPLE_CERTIFICATE:-}" ]; then
+            export APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD
+            if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+              export APPLE_SIGNING_IDENTITY
+            else
+              unset APPLE_SIGNING_IDENTITY
+            fi
+          else
+            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
+          fi
+          npm run tauri build -- --ci --bundles app --target ${{ matrix.target }}
 
       - name: Build dmg (macOS)
         if: matrix.os == 'macos-latest'
@@ -66,6 +82,23 @@ jobs:
           mkdir -p ../dmg
           hdiutil create -volname GitSync -srcfolder "$STAGING" -ov -format UDZO -imagekey zlib-level=9 "../dmg/GitSync_${VERSION}_${ARCH}.dmg"
           rm -rf "$STAGING"
+
+      - name: Notarize and staple dmg (macOS)
+        if: matrix.os == 'macos-latest' && env.APPLE_CERTIFICATE != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "arm64" ]; then ARCH="aarch64"; fi
+          DMG="src-tauri/target/${{ matrix.target }}/release/bundle/dmg/GitSync_${VERSION}_${ARCH}.dmg"
+          test -f "$DMG"
+          test -n "$APPLE_ID" && test -n "$APPLE_PASSWORD" && test -n "$APPLE_TEAM_ID"
+          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple "$DMG"
 
       - name: Package tar.gz (Linux)
         if: matrix.os == 'ubuntu-latest'

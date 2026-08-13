@@ -150,6 +150,16 @@ tar -xzvf GitSync-0.3.2-linux-x86_64.tar.gz
 2. 重新运行 `npm run tauri dev`
 3. 使用独立的测试仓库加载，再验证分支切换
 
+### macOS 提示“已损坏，无法打开”
+
+如果 macOS 提示“GitSync 已损坏，无法打开”，可以先执行以下命令处理：
+
+```bash
+sudo xattr -rd com.apple.quarantine /Applications/GitSync.app
+codesign --force --deep --sign - /Applications/GitSync.app
+open /Applications/GitSync.app
+```
+
 ## 🛠 技术栈
 
 - **后端**：Rust (git2, serde, chrono, tauri-plugin-dialog)
