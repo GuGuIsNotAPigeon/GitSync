@@ -13,6 +13,9 @@ jobs:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     strategy:
       matrix:
         include:
@@ -47,64 +50,13 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Require Apple signing secrets (macOS)
-        if: matrix.os == 'macos-latest' && env.APPLE_CERTIFICATE == ''
-        run: |
-          echo "::error::macOS release 需要配置 APPLE_CERTIFICATE 等 Apple secrets，否则生成的 DMG 无法通过 Gatekeeper"
-          exit 1
-
       - name: Build Tauri app (non-macOS)
         if: matrix.os != 'macos-latest'
         run: npm run tauri build -- --ci --target ${{ matrix.target }}
 
-      - name: Build Tauri app (macOS)
+      - name: Package macOS DMG
         if: matrix.os == 'macos-latest'
-        run: |
-          set -euo pipefail
-          if [ -n "${APPLE_CERTIFICATE:-}" ]; then
-            export APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD
-            if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
-              export APPLE_SIGNING_IDENTITY
-            else
-              unset APPLE_SIGNING_IDENTITY
-            fi
-          else
-            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
-          fi
-          npm run tauri build -- --ci --bundles app --target ${{ matrix.target }}
-
-      - name: Build dmg (macOS)
-        if: matrix.os == 'macos-latest'
-        shell: bash
-        run: |
-          set -euo pipefail
-          VERSION=$(node -p "require('./package.json').version")
-          ARCH=$(uname -m)
-          if [ "$ARCH" = "arm64" ]; then ARCH="aarch64"; fi
-          cd src-tauri/target/${{ matrix.target }}/release/bundle/macos
-          STAGING=$(mktemp -d)
-          ditto GitSync.app "$STAGING/GitSync.app"
-          ln -s /Applications "$STAGING/Applications"
-          mkdir -p ../dmg
-          hdiutil create -volname GitSync -srcfolder "$STAGING" -ov -format UDZO -imagekey zlib-level=9 "../dmg/GitSync_${VERSION}_${ARCH}.dmg"
-          rm -rf "$STAGING"
-
-      - name: Notarize and staple dmg (macOS)
-        if: matrix.os == 'macos-latest' && env.APPLE_CERTIFICATE != ''
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          VERSION=$(node -p "require('./package.json').version")
-          ARCH=$(uname -m)
-          if [ "$ARCH" = "arm64" ]; then ARCH="aarch64"; fi
-          DMG="src-tauri/target/${{ matrix.target }}/release/bundle/dmg/GitSync_${VERSION}_${ARCH}.dmg"
-          test -f "$DMG"
-          test -n "$APPLE_ID" && test -n "$APPLE_PASSWORD" && test -n "$APPLE_TEAM_ID"
-          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
-          xcrun stapler staple "$DMG"
+        run: bash scripts/package-macos-dmg.sh ${{ matrix.target }}
 
       - name: Package tar.gz (Linux)
         if: matrix.os == 'ubuntu-latest'

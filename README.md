@@ -160,6 +160,8 @@ codesign --force --deep --sign - /Applications/GitSync.app
 open /Applications/GitSync.app
 ```
 
+未配置 Apple 签名 secrets 时，安装包使用 ad-hoc 签名，打开时可能提示“无法验证开发者”，右键点击图标选择“打开”即可。配置 Apple Developer ID 签名与公证后无需这些操作。
+
 ## 🛠 技术栈
 
 - **后端**：Rust (git2, serde, chrono, tauri-plugin-dialog)
