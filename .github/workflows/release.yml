@@ -56,9 +56,12 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "${APPLE_CERTIFICATE:-}" ]; then
-            export APPLE_CERTIFICATE
-            export APPLE_CERTIFICATE_PASSWORD
-            export APPLE_SIGNING_IDENTITY
+            export APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD
+            if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+              export APPLE_SIGNING_IDENTITY
+            else
+              unset APPLE_SIGNING_IDENTITY
+            fi
           else
             unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
           fi
