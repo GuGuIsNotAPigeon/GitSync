@@ -147,6 +147,11 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: swatinem/rust-cache@v2
     - run: npm ci
+    - name: Require Apple signing secrets on main (macOS)
+      if: github.ref == 'refs/heads/main' && env.APPLE_CERTIFICATE == ''
+      run: |
+        echo "::error::main macOS 构建需要配置 APPLE_CERTIFICATE 等 Apple secrets"
+        exit 1
     - name: Build Tauri app (macOS)
       run: |
         set -euo pipefail

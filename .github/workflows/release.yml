@@ -47,6 +47,12 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Require Apple signing secrets (macOS)
+        if: matrix.os == 'macos-latest' && env.APPLE_CERTIFICATE == ''
+        run: |
+          echo "::error::macOS release 需要配置 APPLE_CERTIFICATE 等 Apple secrets，否则生成的 DMG 无法通过 Gatekeeper"
+          exit 1
+
       - name: Build Tauri app (non-macOS)
         if: matrix.os != 'macos-latest'
         run: npm run tauri build -- --ci --target ${{ matrix.target }}
