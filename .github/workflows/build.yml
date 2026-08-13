@@ -132,6 +132,10 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
     outputs:
       files: ${{ steps.files.outputs.files }}
     steps:
@@ -143,7 +147,20 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: swatinem/rust-cache@v2
     - run: npm ci
-    - run: npm run tauri build -- --ci --bundles app
+    - name: Build Tauri app (macOS)
+      run: |
+        set -euo pipefail
+        if [ -n "${APPLE_CERTIFICATE:-}" ]; then
+          export APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD
+          if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+            export APPLE_SIGNING_IDENTITY
+          else
+            unset APPLE_SIGNING_IDENTITY
+          fi
+        else
+          unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
+        fi
+        npm run tauri build -- --ci --bundles app
     - name: Build dmg
       shell: bash
       run: |
@@ -158,6 +175,22 @@ jobs:
         mkdir -p ../dmg
         hdiutil create -volname GitSync -srcfolder "$STAGING" -ov -format UDZO -imagekey zlib-level=9 "../dmg/GitSync_${VERSION}_${ARCH}.dmg"
         rm -rf "$STAGING"
+    - name: Notarize and staple dmg (macOS)
+      if: env.APPLE_CERTIFICATE != ''
+      env:
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      run: |
+        set -euo pipefail
+        VERSION=$(node -p "require('./package.json').version")
+        ARCH=$(uname -m)
+        if [ "$ARCH" = "arm64" ]; then ARCH="aarch64"; fi
+        DMG="src-tauri/target/release/bundle/dmg/GitSync_${VERSION}_${ARCH}.dmg"
+        test -f "$DMG"
+        test -n "$APPLE_ID" && test -n "$APPLE_PASSWORD" && test -n "$APPLE_TEAM_ID"
+        xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+        xcrun stapler staple "$DMG"
     - name: Collect installers
       id: files
       shell: bash
