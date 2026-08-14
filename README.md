@@ -1,5 +1,9 @@
 # GitSync 
 
+<div align="center">
+  <a href="README_EN.md"><kbd>🌐 English</kbd></a>
+</div>
+
 交互式 Git 历史浏览器，可视化提交图、分支、差异对比、Blame 等，帮助开发者更直观地理解和管理 Git 仓库。
 
 🌐 适配 macOS 和 Windows 以及大部分 Linux 的发行版 ，基于 Rust + Tauri 构建，性能爆炸💥
