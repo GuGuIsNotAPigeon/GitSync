@@ -1,8 +1,8 @@
-# GitSync
-
 <div align="center">
   <a href="README.md"><kbd>🌐 中文</kbd></a>
 </div>
+
+# GitSync
 
 An interactive Git history browser that visualizes commit graphs, branches, diffs, blame, and more, helping developers understand and manage Git repositories more intuitively.
 

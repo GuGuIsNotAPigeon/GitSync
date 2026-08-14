@@ -1,8 +1,8 @@
-# GitSync 
-
 <div align="center">
   <a href="README_EN.md"><kbd>🌐 English</kbd></a>
 </div>
+
+# GitSync 
 
 交互式 Git 历史浏览器，可视化提交图、分支、差异对比、Blame 等，帮助开发者更直观地理解和管理 Git 仓库。
 
