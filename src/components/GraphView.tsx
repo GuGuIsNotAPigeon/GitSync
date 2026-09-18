@@ -27,7 +27,12 @@ export default function GraphView({ repoPath, onSelectCommit }: { repoPath: stri
       canvas.width = containerRef.current?.clientWidth || 800;
       canvas.height = commits.length * 40;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
+
+      // 画布颜色从 CSS 变量取：浅色主题下画布文字不再是浅灰看不清
+      const css = getComputedStyle(document.documentElement);
+      const accent = css.getPropertyValue('--accent').trim() || '#5B9BD5';
+      const textCol = css.getPropertyValue('--text-secondary').trim() || '#c8d6e5';
+
       const positions: Record<string, { x: number; y: number }> = {};
       positionsRef.current = positions;
       commitsRef.current = commits;
@@ -37,15 +42,15 @@ export default function GraphView({ repoPath, onSelectCommit }: { repoPath: stri
         const x = 60 + (c.parent_hashes.length > 1 ? 20 : 0);
         positions[c.hash] = { x, y };
       });
-      
+
       commits.forEach((c, i) => {
         const y = i * 40 + 20;
         const x = positions[c.hash]?.x || 60;
-        
+
         c.parent_hashes.forEach(pHash => {
           const pPos = positions[pHash];
           if (pPos) {
-            ctx.strokeStyle = '#5B9BD5';
+            ctx.strokeStyle = accent;
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(x, y);
@@ -53,15 +58,15 @@ export default function GraphView({ repoPath, onSelectCommit }: { repoPath: stri
             ctx.stroke();
           }
         });
-        
-        ctx.fillStyle = '#5B9BD5';
+
+        ctx.fillStyle = accent;
         ctx.beginPath();
         ctx.arc(x, y, 6, 0, Math.PI * 2);
         ctx.fill();
-        
-        ctx.fillStyle = '#c8d6e5';
+
+        ctx.fillStyle = textCol;
         ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.fillText(`${c.hash.substring(0, 8)} - ${c.message.substring(0, 40)}`, x + 14, y + 4);
+        ctx.fillText(`${c.hash.substring(0, 8)} - ${c.message.split('\n')[0].substring(0, 40)}`, x + 14, y + 4);
       });
     };
     

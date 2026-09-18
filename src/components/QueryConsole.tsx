@@ -45,7 +45,9 @@ export default function QueryConsole({ repoPath }: { repoPath: string }) {
     result.rows.forEach(row => {
       csv += row.map(cell => `"${safeCsvCell(cell.replace(/"/g, '""'))}"`).join(',') + '\n';
     });
-    navigator.clipboard.writeText(csv).then(() => alert('CSV 已复制到剪贴板'));
+    navigator.clipboard.writeText(csv)
+      .then(() => alert('CSV 已复制到剪贴板'))
+      .catch(() => setError('复制到剪贴板失败，请重试'));
   };
 
   const loadHistoryItem = (item: string) => {
@@ -65,15 +67,15 @@ export default function QueryConsole({ repoPath }: { repoPath: string }) {
     <motion.div className="analysis-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
       <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         GitSQL 查询
-        <button className="btn" onClick={() => setShowHelp(!showHelp)} style={{ fontSize: 12, padding: '2px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'var(--text-dim)', cursor: 'pointer' }}>
+        <button className="btn" onClick={() => setShowHelp(!showHelp)} style={{ fontSize: 12, padding: '2px 10px' }}>
           {showHelp ? '隐藏帮助' : '语法帮助'}
         </button>
       </h3>
 
       {showHelp && (
-        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, padding: 12, marginBottom: 12, fontSize: 12, color: 'var(--text-dim)', maxHeight: 200, overflowY: 'auto' }}>
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 8, padding: 12, marginBottom: 12, fontSize: 12, color: 'var(--text-dim)', maxHeight: 200, overflowY: 'auto' }}>
           <div className="section-title" style={{ marginBottom: 8 }}>支持语法</div>
-          <div style={{ fontFamily: 'monospace', lineHeight: 1.8 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', lineHeight: 1.8 }}>
             <div>SELECT column1, column2, ... FROM table_name</div>
             <div>JOIN table2 ON table1.col = table2.col</div>
             <div>WHERE column = 'value' AND column2 &gt; '2026-01-01'</div>
@@ -83,7 +85,7 @@ export default function QueryConsole({ repoPath }: { repoPath: string }) {
             <div>LIMIT number</div>
             <div style={{ marginTop: 8 }}>聚合函数: COUNT(*), SUM(col), AVG(col), MAX(col), MIN(col)</div>
             <div>别名: SELECT col AS alias_name</div>
-            <div style={{ marginTop: 8 }}>可用表: <span style={{ color: '#5B9BD5' }}>commits</span>, <span style={{ color: '#5B9BD5' }}>file_changes</span></div>
+            <div style={{ marginTop: 8 }}>可用表: <span style={{ color: 'var(--accent)' }}>commits</span>, <span style={{ color: 'var(--accent)' }}>file_changes</span></div>
           </div>
         </div>
       )}
@@ -93,7 +95,7 @@ export default function QueryConsole({ repoPath }: { repoPath: string }) {
         value={sql}
         onChange={e => setSql(e.target.value)}
         placeholder="输入 SQL 查询...&#10;例如: SELECT * FROM commits LIMIT 10"
-        style={{ minHeight: 80, fontFamily: 'monospace' }}
+        style={{ minHeight: 80, fontFamily: 'var(--font-mono)' }}
       />
 
       <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
@@ -105,20 +107,20 @@ export default function QueryConsole({ repoPath }: { repoPath: string }) {
             <span className="time" style={{ fontSize: 12, color: 'var(--text-dim)', alignSelf: 'center' }}>
               耗时: {result.elapsed_ms}ms | {result.rows.length} 行
             </span>
-            <button className="btn" onClick={exportCSV} style={{ fontSize: 12, padding: '4px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'var(--text-dim)', cursor: 'pointer' }}>
+            <button className="btn" onClick={exportCSV} style={{ fontSize: 12, padding: '4px 12px' }}>
               导出 CSV
             </button>
           </>
         )}
       </div>
 
-      {error && <div className="analysis-item" style={{ color: '#ff6b6b' }}>{error}</div>}
+      {error && <div className="analysis-item" style={{ color: 'var(--danger)' }}>{error}</div>}
 
       {sampleQueries.length > 0 && !result && !running && (
         <div style={{ marginTop: 12 }}>
           <div className="section-title" style={{ marginBottom: 6 }}>示例查询</div>
           {sampleQueries.map((q, i) => (
-            <div key={i} className="analysis-item" onClick={() => setSql(q)} style={{ cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+            <div key={i} className="analysis-item" onClick={() => setSql(q)} style={{ cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
               {q}
             </div>
           ))}
@@ -129,7 +131,7 @@ export default function QueryConsole({ repoPath }: { repoPath: string }) {
         <div style={{ marginTop: 12 }}>
           <div className="section-title" style={{ marginBottom: 6 }}>查询历史</div>
           {history.map((h, i) => (
-            <div key={i} className="analysis-item" onClick={() => loadHistoryItem(h)} style={{ cursor: 'pointer', fontFamily: 'monospace', fontSize: 11 }}>
+            <div key={i} className="analysis-item" onClick={() => loadHistoryItem(h)} style={{ cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
               {h}
             </div>
           ))}

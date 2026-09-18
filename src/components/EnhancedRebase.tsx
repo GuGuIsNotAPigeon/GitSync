@@ -68,7 +68,7 @@ export default function EnhancedRebase({ repoPath, onComplete }: { repoPath: str
     <motion.div className="analysis-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
       <h3>交互 Rebase 增强</h3>
       <button className="btn btn-blue" onClick={load} style={{ marginBottom: 12 }}>加载提交</button>
-      {error && <div className="analysis-item" style={{ color: '#ff6b6b' }}>{error}</div>}
+      {error && <div className="analysis-item" style={{ color: 'var(--danger)' }}>{error}</div>}
       <Reorder.Group values={ops} onReorder={setOps}>
         {ops.map((op, idx) => (
           <Reorder.Item key={op.hash} value={op}>

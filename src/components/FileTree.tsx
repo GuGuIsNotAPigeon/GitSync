@@ -49,9 +49,9 @@ export default function FileTree({ repoPath, onSelectFile }: { repoPath: string;
         >
           {node.is_directory ? (
             expanded.has(fullPath) ? (
-              <VscFolderOpened size={16} style={{ color: '#ffca28', marginRight: 8, flexShrink: 0 }} />
+              <VscFolderOpened size={16} style={{ color: 'var(--gold)', marginRight: 8, flexShrink: 0 }} />
             ) : (
-              <VscFolder size={16} style={{ color: '#ffca28', marginRight: 8, flexShrink: 0 }} />
+              <VscFolder size={16} style={{ color: 'var(--gold)', marginRight: 8, flexShrink: 0 }} />
             )
           ) : (
             <span style={{ marginRight: 8, display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
@@ -69,7 +69,7 @@ export default function FileTree({ repoPath, onSelectFile }: { repoPath: string;
     <motion.div className="analysis-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
       <h3>文件树</h3>
       <button className="btn btn-blue" onClick={loadTree}>加载文件树</button>
-      {error && <div className="analysis-item" style={{ color: '#ff6b6b' }}>{error}</div>}
+      {error && <div className="analysis-item" style={{ color: 'var(--danger)' }}>{error}</div>}
       <div style={{ maxHeight: 400, overflowY: 'auto', marginTop: 12 }}>
         {nodes.sort((a, b) => {
           if (a.is_directory !== b.is_directory) {

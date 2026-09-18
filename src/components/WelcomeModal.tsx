@@ -49,7 +49,7 @@ export default function WelcomeModal({
           </div>
 
           <div className="glass-modal-body" style={{ paddingTop: 8 }}>
-            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', marginBottom: 4, lineHeight: 1.6 }}>
+            <p style={{ fontSize: 14, color: 'var(--overlay-text-dim)', marginBottom: 4, lineHeight: 1.6 }}>
               感谢您使用我们的产品desuwa！选择你喜欢的界面背景风格，后续还可在 <strong>UI 管理</strong> 面板中随时切换哦awa
             </p>
 
@@ -59,23 +59,23 @@ export default function WelcomeModal({
                 className="welcome-option"
                 onClick={() => onSelect('preset')}
                 style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'var(--overlay-panel)',
+                  border: '1px solid var(--overlay-border)',
                   borderRadius: 16,
                   padding: '12px 12px 10px',
                   cursor: 'pointer',
                   transition: 'all 0.25s ease',
                   textAlign: 'center',
-                  color: 'var(--text)',
+                  color: 'var(--overlay-text)',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.background = 'var(--overlay-panel-hover)';
                   e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)';
                   e.currentTarget.style.transform = 'translateY(-2px)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.background = 'var(--overlay-panel)';
+                  e.currentTarget.style.borderColor = 'var(--overlay-border)';
                   e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
@@ -86,7 +86,7 @@ export default function WelcomeModal({
                     borderRadius: 10,
                     overflow: 'hidden',
                     marginBottom: 8,
-                    background: '#1a1a2e',
+                    background: 'var(--grad-a)',
                   }}
                 >
                   <img
@@ -104,23 +104,23 @@ export default function WelcomeModal({
                 className="welcome-option"
                 onClick={() => onSelect('md')}
                 style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'var(--overlay-panel)',
+                  border: '1px solid var(--overlay-border)',
                   borderRadius: 16,
                   padding: '12px 12px 10px',
                   cursor: 'pointer',
                   transition: 'all 0.25s ease',
                   textAlign: 'center',
-                  color: 'var(--text)',
+                  color: 'var(--overlay-text)',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.background = 'var(--overlay-panel-hover)';
                   e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)';
                   e.currentTarget.style.transform = 'translateY(-2px)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.background = 'var(--overlay-panel)';
+                  e.currentTarget.style.borderColor = 'var(--overlay-border)';
                   e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
@@ -130,7 +130,7 @@ export default function WelcomeModal({
                     height: 80,
                     borderRadius: 10,
                     marginBottom: 8,
-                    background: 'linear-gradient(145deg, #1a1a2e, #16213e, #0f3460)',
+                    background: 'linear-gradient(145deg, var(--grad-a), var(--grad-b), var(--grad-c))',
                   }}
                 />
                 <div style={{ fontWeight: 600, fontSize: 14 }}>MD 纯色</div>
@@ -142,23 +142,23 @@ export default function WelcomeModal({
                 className="welcome-option"
                 onClick={() => onSelect('custom')}
                 style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'var(--overlay-panel)',
+                  border: '1px solid var(--overlay-border)',
                   borderRadius: 16,
                   padding: '12px 12px 10px',
                   cursor: 'pointer',
                   transition: 'all 0.25s ease',
                   textAlign: 'center',
-                  color: 'var(--text)',
+                  color: 'var(--overlay-text)',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.background = 'var(--overlay-panel-hover)';
                   e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)';
                   e.currentTarget.style.transform = 'translateY(-2px)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.background = 'var(--overlay-panel)';
+                  e.currentTarget.style.borderColor = 'var(--overlay-border)';
                   e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
@@ -169,7 +169,7 @@ export default function WelcomeModal({
                     borderRadius: 10,
                     overflow: 'hidden',
                     marginBottom: 8,
-                    background: 'rgba(255,255,255,0.05)',
+                    background: 'var(--overlay-panel)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -182,7 +182,7 @@ export default function WelcomeModal({
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                   ) : (
-                    <span style={{ fontSize: 28, color: 'rgba(255,255,255,0.2)' }}>+</span>
+                    <span style={{ fontSize: 28, color: 'var(--overlay-text-dim)' }}>+</span>
                   )}
                 </div>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>自定义图片</div>
@@ -196,9 +196,9 @@ export default function WelcomeModal({
               className="btn"
               onClick={onClose}
               style={{
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                color: 'rgba(255,255,255,0.6)',
+                background: 'var(--overlay-panel)',
+                border: '1px solid var(--overlay-border)',
+                color: 'var(--overlay-text-dim)',
                 padding: '8px 20px',
                 borderRadius: 10,
                 fontSize: 13,
@@ -206,12 +206,12 @@ export default function WelcomeModal({
                 transition: 'all 0.2s ease',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.color = '#ffffff';
+                e.currentTarget.style.background = 'var(--overlay-panel-hover)';
+                e.currentTarget.style.color = 'var(--overlay-text)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                e.currentTarget.style.color = 'rgba(255,255,255,0.6)';
+                e.currentTarget.style.background = 'var(--overlay-panel)';
+                e.currentTarget.style.color = 'var(--overlay-text-dim)';
               }}
             >
               稍后选择，先尝尝咸淡？

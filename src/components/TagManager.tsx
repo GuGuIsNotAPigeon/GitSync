@@ -38,7 +38,7 @@ export default function TagManager({ repoPath }: { repoPath: string }) {
     <motion.div className="analysis-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
       <h3>标签管理</h3>
       <button className="btn btn-blue" onClick={loadTags}>加载标签</button>
-      {error && <div className="analysis-item" style={{ color: '#ff6b6b' }}>{error}</div>}
+      {error && <div className="analysis-item" style={{ color: 'var(--danger)' }}>{error}</div>}
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         <input className="path-input" value={newName} onChange={e => setNewName(e.target.value)} placeholder="标签名" />
         <input className="path-input" value={newHash} onChange={e => setNewHash(e.target.value)} placeholder="提交哈希" />

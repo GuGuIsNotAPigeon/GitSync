@@ -43,7 +43,7 @@ export default function HookManager({ repoPath }: { repoPath: string }) {
     <motion.div className="analysis-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
       <h3>Git Hooks 管理器</h3>
       <button className="btn btn-blue" onClick={loadHooks}>加载 Hooks</button>
-      {error && <div className="analysis-item" style={{ color: '#ff6b6b' }}>{error}</div>}
+      {error && <div className="analysis-item" style={{ color: 'var(--danger)' }}>{error}</div>}
       {hooks.map(h => (
         <div key={h} className="analysis-item" onClick={() => loadContent(h)} style={{ cursor: 'pointer' }}>
           {h}

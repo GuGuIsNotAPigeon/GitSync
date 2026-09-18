@@ -217,7 +217,8 @@ function App() {
   // UI 状态（全局生效，不会因为切换面板而重置）
   const [bgOpacity, setBgOpacity] = useState(() => Number(localStorage.getItem('bg_opacity') || '0.9'));
   const [bgBase64, setBgBase64] = useState(() => localStorage.getItem('bg_base64') || DEFAULT_BG_BASE64);
-  const [panelMode, setPanelMode] = useState<'stack' | 'replace'>(() => (localStorage.getItem('panel_mode') as 'stack' | 'replace') || 'stack');
+  // 默认 replace（手风琴：同时只开一个面板）；老用户在 UI 管理里显式选过 stack 则尊重其选择
+  const [panelMode, setPanelMode] = useState<'stack' | 'replace'>(() => (localStorage.getItem('panel_mode') as 'stack' | 'replace') || 'replace');
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
   const [torchSize, setTorchSize] = useState(() => Number(localStorage.getItem('torch_size') || '100'));
 
@@ -256,8 +257,14 @@ function App() {
     search_export: false,
     advanced: false
   });
+  // 手风琴：同一时刻侧栏最多展开一个分组；再点已展开的分组则收起
   const toggleSection = (section: string) => {
-    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
+    setExpandedSections(prev => {
+      if (prev[section]) return { ...prev, [section]: false };
+      const next: Record<string, boolean> = {};
+      for (const key of Object.keys(prev)) next[key] = key === section;
+      return next;
+    });
   };
 
   // 自动滚动状态
@@ -270,6 +277,8 @@ function App() {
   const [stashList, setStashList] = useState<StashEntry[]>([]);
   const [_rebaseOps, setRebaseOps] = useState<RebaseOperation[]>([]);
 
+  const [activePanelId, setActivePanelId] = useState<string | null>(null);
+
   // 替换模式：关闭所有面板
   const closeAllPanels = () => {
     setShowHealth(false); setShowContributors(false); setShowHotFiles(false);
@@ -281,6 +290,25 @@ function App() {
     setShowChangelog(false); setShowScriptRunner(false); setShowQueryConsole(false);
     setShowTimeMachine(false); setShowUIManager(false);
     setSelectedTreeFile(null);
+    setActivePanelId(null);
+  };
+
+  // 面板统一开关入口：replace（手风琴）模式下开新面板先关其它面板；
+  // activePanelId 驱动侧栏条目高亮和右下角「关闭面板」按钮
+  const openPanel = (id: string, setter: (v: boolean) => void) => {
+    if (panelMode === 'replace') closeAllPanels();
+    setter(true);
+    setActivePanelId(id);
+  };
+
+  const togglePanel = (id: string, panelDomId: string, current: boolean, setter: (v: boolean) => void) => {
+    if (current) {
+      setter(false);
+      setActivePanelId(null);
+      return;
+    }
+    openPanel(id, setter);
+    setScrollToPanelId(panelDomId);
   };
 
   const switchBranch = useCallback(async (branchName: string) => {
@@ -425,11 +453,11 @@ function App() {
     card.style.setProperty('--torch-y', ((e.clientY - rect.top) / rect.height) * 100 + '%');
   };
 
-  const loadHealthReport = async () => { try { const res = await invoke<HealthReport>('get_health_report', { path: repoPath }); setHealthReport(res); if (panelMode === 'replace') closeAllPanels(); setShowHealth(true); } catch (e: any) { setError(String(e)); } };
-  const loadContributors = async () => { try { const res = await invoke<Contributor[]>('get_contributors', { path: repoPath }); setContributors(res); if (panelMode === 'replace') closeAllPanels(); setShowContributors(true); } catch (e: any) { setError(String(e)); } };
-  const loadHotFiles = async () => { try { const res = await invoke<HotFile[]>('get_hot_files', { path: repoPath }); setHotFiles(res); if (panelMode === 'replace') closeAllPanels(); setShowHotFiles(true); } catch (e: any) { setError(String(e)); } };
-  const loadStashList = async () => { try { const res = await invoke<StashEntry[]>('stash_list', { path: repoPath }); setStashList(res); if (panelMode === 'replace') closeAllPanels(); setShowStash(true); } catch (e: any) { setError(String(e)); } };
-  const loadRebaseCommits = async () => { try { const res = await invoke<RebaseCommit[]>('get_rebase_commits', { path: repoPath, count: 20 }); setRebaseOps(res.map(c => ({ hash: c.hash, action: 'pick' }))); if (panelMode === 'replace') closeAllPanels(); setShowRebase(true); } catch (e: any) { setError(String(e)); } };
+  const loadHealthReport = async () => { try { const res = await invoke<HealthReport>('get_health_report', { path: repoPath }); setHealthReport(res); openPanel('health', setShowHealth); } catch (e: any) { setError(String(e)); } };
+  const loadContributors = async () => { try { const res = await invoke<Contributor[]>('get_contributors', { path: repoPath }); setContributors(res); openPanel('contributors', setShowContributors); } catch (e: any) { setError(String(e)); } };
+  const loadHotFiles = async () => { try { const res = await invoke<HotFile[]>('get_hot_files', { path: repoPath }); setHotFiles(res); openPanel('hotfiles', setShowHotFiles); } catch (e: any) { setError(String(e)); } };
+  const loadStashList = async () => { try { const res = await invoke<StashEntry[]>('stash_list', { path: repoPath }); setStashList(res); openPanel('stash', setShowStash); } catch (e: any) { setError(String(e)); } };
+  const loadRebaseCommits = async () => { try { const res = await invoke<RebaseCommit[]>('get_rebase_commits', { path: repoPath, count: 20 }); setRebaseOps(res.map(c => ({ hash: c.hash, action: 'pick' }))); openPanel('rebase', setShowRebase); } catch (e: any) { setError(String(e)); } };
 
   const renderSectionHeader = (title: string, section: string) => (
     <div className="section-header" onClick={() => toggleSection(section)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', cursor: 'pointer', userSelect: 'none' }}>
@@ -487,7 +515,7 @@ function App() {
           width: '100%',
           height: '100%',
           zIndex: -1,
-          background: 'linear-gradient(145deg, #1a1a2e, #16213e, #0f3460)',
+          background: 'linear-gradient(145deg, var(--grad-a), var(--grad-b), var(--grad-c))',
           opacity: bgOpacity,
           pointerEvents: 'none',
         }} />
@@ -502,12 +530,26 @@ function App() {
       <motion.div className="pointer-glow" style={{ left: springX, top: springY, position: 'fixed' }} />
 
       <FeedbackOverlay loading={loading || detailLoading} loadingText={loading || detailLoading ? '加载中...' : null} toast={toast} onToastClose={() => setToast(null)} />
+      <AnimatePresence>
+        {activePanelId && (
+          <motion.button
+            className="panel-close-fab"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            onClick={closeAllPanels}
+            title="关闭当前面板"
+          >
+            ✕ 关闭面板
+          </motion.button>
+        )}
+      </AnimatePresence>
       <div className="app">
         <header className="topbar">
-          <h1><SiGit size={22} color="#5B9BD5" /> GitSync</h1>
+          <h1><SiGit size={22} color="var(--accent)" /> GitSync</h1>
           <button
             onClick={openFolder}
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '7px 10px', color: 'var(--text)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10, padding: '7px 10px', color: 'var(--text)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             title="打开文件夹"
           >
             <VscFolderOpened size={18} />
@@ -515,7 +557,7 @@ function App() {
           <input className="path-input" type="text" value={repoPath} onChange={(e) => setRepoPath(e.target.value)} placeholder="输入仓库路径..." onKeyDown={(e) => e.key === 'Enter' && loadRepo()} />
           <div style={{ display: 'flex', gap: 8, flex: 1 }}>
             <input className="path-input" type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="搜索提交..." onKeyDown={(e) => e.key === 'Enter' && handleSearch()} style={{ flex: 1 }} />
-            <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.95 }} onClick={handleSearch} style={{ background: 'rgba(91,155,213,0.1)', border: '1px solid rgba(91,155,213,0.2)', color: '#5B9BD5', padding: '7px 12px', borderRadius: 10, cursor: 'pointer' }}>
+            <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.95 }} onClick={handleSearch} style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', color: 'var(--accent)', padding: '7px 12px', borderRadius: 10, cursor: 'pointer' }}>
               <VscSearch size={16} />
             </motion.button>
           </div>
@@ -531,7 +573,7 @@ function App() {
           <div className="section-title"><VscRepoForked size={12} style={{ marginRight: 6 }} />分支</div>
           {branches.length > 0 ? branches.map(b => (
             <div key={b.name} className={`branch-item ${b.name === activeBranch ? 'active' : ''}`} onClick={() => switchBranch(b.name)}>
-              <span className="branch-dot" style={{ background: b.name === activeBranch ? '#5B9BD5' : '#576574' }} />
+              <span className="branch-dot" style={{ background: b.name === activeBranch ? 'var(--accent)' : 'var(--text-faint)' }} />
               {b.name}
             </div>
           )) : (
@@ -543,9 +585,9 @@ function App() {
           <AnimatePresence>
             {expandedSections.history && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} style={{ overflow: 'hidden' }}>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowGraph(!showGraph); setScrollToPanelId('panel-graph'); }}>提交图</div>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowFileTree(!showFileTree); setScrollToPanelId('panel-filetree'); }}>文件树</div>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowCommitFilter(!showCommitFilter); setScrollToPanelId('panel-filter'); }}>提交筛选</div>
+                <div className={`branch-item ${activePanelId === 'graph' ? 'panel-open' : ''}`} onClick={() => togglePanel('graph', 'panel-graph', showGraph, setShowGraph)}>提交图</div>
+                <div className={`branch-item ${activePanelId === 'filetree' ? 'panel-open' : ''}`} onClick={() => togglePanel('filetree', 'panel-filetree', showFileTree, setShowFileTree)}>文件树</div>
+                <div className={`branch-item ${activePanelId === 'filter' ? 'panel-open' : ''}`} onClick={() => togglePanel('filter', 'panel-filter', showCommitFilter, setShowCommitFilter)}>提交筛选</div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -554,10 +596,10 @@ function App() {
           <AnimatePresence>
             {expandedSections.trace && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} style={{ overflow: 'hidden' }}>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowSyntaxHighlight(!showSyntaxHighlight); setScrollToPanelId('panel-syntax'); }}>Diff 高亮</div>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowSideBySide(!showSideBySide); setScrollToPanelId('panel-sidebyside'); }}>并排对比</div>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowSemanticSearch(!showSemanticSearch); setScrollToPanelId('panel-semantic'); }}>语义搜索</div>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowDiffViewer(!showDiffViewer); setScrollToPanelId('panel-diffviewer'); }}>差异对比</div>
+                <div className={`branch-item ${activePanelId === 'syntax' ? 'panel-open' : ''}`} onClick={() => togglePanel('syntax', 'panel-syntax', showSyntaxHighlight, setShowSyntaxHighlight)}>Diff 高亮</div>
+                <div className={`branch-item ${activePanelId === 'sidebyside' ? 'panel-open' : ''}`} onClick={() => togglePanel('sidebyside', 'panel-sidebyside', showSideBySide, setShowSideBySide)}>并排对比</div>
+                <div className={`branch-item ${activePanelId === 'semantic' ? 'panel-open' : ''}`} onClick={() => togglePanel('semantic', 'panel-semantic', showSemanticSearch, setShowSemanticSearch)}>语义搜索</div>
+                <div className={`branch-item ${activePanelId === 'diffviewer' ? 'panel-open' : ''}`} onClick={() => togglePanel('diffviewer', 'panel-diffviewer', showDiffViewer, setShowDiffViewer)}>差异对比</div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -566,9 +608,9 @@ function App() {
           <AnimatePresence>
             {expandedSections.analysis && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} style={{ overflow: 'hidden' }}>
-                <div className="branch-item" onClick={() => { loadHealthReport(); setScrollToPanelId('panel-health'); }}>仓库健康</div>
-                <div className="branch-item" onClick={() => { loadContributors(); setScrollToPanelId('panel-contributors'); }}>贡献者统计</div>
-                <div className="branch-item" onClick={() => { loadHotFiles(); setScrollToPanelId('panel-hotfiles'); }}>热点文件</div>
+                <div className={`branch-item ${activePanelId === 'health' ? 'panel-open' : ''}`} onClick={() => { loadHealthReport(); setScrollToPanelId('panel-health'); }}>仓库健康</div>
+                <div className={`branch-item ${activePanelId === 'contributors' ? 'panel-open' : ''}`} onClick={() => { loadContributors(); setScrollToPanelId('panel-contributors'); }}>贡献者统计</div>
+                <div className={`branch-item ${activePanelId === 'hotfiles' ? 'panel-open' : ''}`} onClick={() => { loadHotFiles(); setScrollToPanelId('panel-hotfiles'); }}>热点文件</div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -577,11 +619,11 @@ function App() {
           <AnimatePresence>
             {expandedSections.actions && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} style={{ overflow: 'hidden' }}>
-                <div className="branch-item" onClick={() => { loadStashList(); setScrollToPanelId('panel-stash'); }}>Stash 管理</div>
-                <div className="branch-item" onClick={() => { loadRebaseCommits(); setScrollToPanelId('panel-rebase'); }}>交互 Rebase</div>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowTagManager(!showTagManager); setScrollToPanelId('panel-tags'); }}>标签管理</div>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowRemoteManager(!showRemoteManager); setScrollToPanelId('panel-remotes'); }}>远程仓库</div>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowMultiRepo(!showMultiRepo); setScrollToPanelId('panel-multirepo'); }}>多仓库</div>
+                <div className={`branch-item ${activePanelId === 'stash' ? 'panel-open' : ''}`} onClick={() => { loadStashList(); setScrollToPanelId('panel-stash'); }}>Stash 管理</div>
+                <div className={`branch-item ${activePanelId === 'rebase' ? 'panel-open' : ''}`} onClick={() => { loadRebaseCommits(); setScrollToPanelId('panel-rebase'); }}>交互 Rebase</div>
+                <div className={`branch-item ${activePanelId === 'tags' ? 'panel-open' : ''}`} onClick={() => togglePanel('tags', 'panel-tags', showTagManager, setShowTagManager)}>标签管理</div>
+                <div className={`branch-item ${activePanelId === 'remotes' ? 'panel-open' : ''}`} onClick={() => togglePanel('remotes', 'panel-remotes', showRemoteManager, setShowRemoteManager)}>远程仓库</div>
+                <div className={`branch-item ${activePanelId === 'multirepo' ? 'panel-open' : ''}`} onClick={() => togglePanel('multirepo', 'panel-multirepo', showMultiRepo, setShowMultiRepo)}>多仓库</div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -590,8 +632,8 @@ function App() {
           <AnimatePresence>
             {expandedSections.search_export && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} style={{ overflow: 'hidden' }}>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowChangelog(!showChangelog); setScrollToPanelId('panel-changelog'); }}>变更日志</div>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowExportHTML(!showExportHTML); setScrollToPanelId('panel-export'); }}>导出报告</div>
+                <div className={`branch-item ${activePanelId === 'changelog' ? 'panel-open' : ''}`} onClick={() => togglePanel('changelog', 'panel-changelog', showChangelog, setShowChangelog)}>变更日志</div>
+                <div className={`branch-item ${activePanelId === 'export' ? 'panel-open' : ''}`} onClick={() => togglePanel('export', 'panel-export', showExportHTML, setShowExportHTML)}>导出报告</div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -600,19 +642,24 @@ function App() {
           <AnimatePresence>
             {expandedSections.advanced && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} style={{ overflow: 'hidden' }}>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowHookManager(!showHookManager); setScrollToPanelId('panel-hooks'); }}>Git Hooks</div>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowConflictResolver(!showConflictResolver); setScrollToPanelId('panel-conflict'); }}>冲突解决</div>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowScriptRunner(!showScriptRunner); setScrollToPanelId('panel-scripts'); }}>脚本扩展</div>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowQueryConsole(!showQueryConsole); setScrollToPanelId('panel-sql'); }}>SQL 查询</div>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowTimeMachine(!showTimeMachine); setScrollToPanelId('panel-timemachine'); }}>时间机器</div>
-                <div className="branch-item" onClick={() => { if (panelMode === 'replace') closeAllPanels(); setShowUIManager(!showUIManager); setScrollToPanelId('panel-ui'); }}>UI 管理</div>
+                <div className={`branch-item ${activePanelId === 'hooks' ? 'panel-open' : ''}`} onClick={() => togglePanel('hooks', 'panel-hooks', showHookManager, setShowHookManager)}>Git Hooks</div>
+                <div className={`branch-item ${activePanelId === 'conflict' ? 'panel-open' : ''}`} onClick={() => togglePanel('conflict', 'panel-conflict', showConflictResolver, setShowConflictResolver)}>冲突解决</div>
+                <div className={`branch-item ${activePanelId === 'scripts' ? 'panel-open' : ''}`} onClick={() => togglePanel('scripts', 'panel-scripts', showScriptRunner, setShowScriptRunner)}>脚本扩展</div>
+                <div className={`branch-item ${activePanelId === 'sql' ? 'panel-open' : ''}`} onClick={() => togglePanel('sql', 'panel-sql', showQueryConsole, setShowQueryConsole)}>SQL 查询</div>
+                <div className={`branch-item ${activePanelId === 'timemachine' ? 'panel-open' : ''}`} onClick={() => togglePanel('timemachine', 'panel-timemachine', showTimeMachine, setShowTimeMachine)}>时间机器</div>
+                <div className={`branch-item ${activePanelId === 'ui' ? 'panel-open' : ''}`} onClick={() => togglePanel('ui', 'panel-ui', showUIManager, setShowUIManager)}>UI 管理</div>
               </motion.div>
             )}
           </AnimatePresence>
         </aside>
 
         <main className="main" ref={mainRef} style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', scrollBehavior: 'smooth' }}>
-          {error && (<motion.div className="error" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>{error}</motion.div>)}
+          {error && (
+            <motion.div className="error" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+              <span>{error}</span>
+              <button className="error-close" onClick={() => setError('')} aria-label="关闭错误提示">×</button>
+            </motion.div>
+          )}
           {commits.length > 0 && (<div className="status-bar"><span className="status-dot" /><VscGitCommit size={14} />{commits.length} 个提交</div>)}
           {commits.length === 0 && !error && !loading && (<div className="empty-state"><VscEmptyWindow size={48} /><p style={{ marginTop: 12 }}>输入仓库路径并加载，查看提交历史</p></div>)}
           <div className="commit-list">
@@ -642,14 +689,15 @@ function App() {
                     >
                       <div className="torch-glow" />
                       <div className="commit-header"><span className="hash">{c.hash.substring(0, 8)}</span><span className="author">{c.author}</span><span className="time">{c.time}</span></div>
-                      <div className="message">{c.message}</div>
+                      {/* 列表只显示标题行，完整 message（含 body）悬停可见 */}
+                      <div className="message" title={c.message}>{c.message.split('\n')[0]}</div>
                     </motion.div>
 
                     <AnimatePresence>
                       {isSelected && (
                         <motion.div className="commit-detail" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.3, type: 'spring', stiffness: 120 }} style={{ marginTop: 8, marginBottom: 16, overflow: 'hidden' }}>
                           {detailLoading ? (
-                            <div style={{ color: 'rgba(255,255,255,0.5)', textAlign: 'center', padding: 20 }}>加载详情中...</div>
+                            <div style={{ color: 'var(--text-dim)', textAlign: 'center', padding: 20 }}>加载详情中...</div>
                           ) : commitDetail ? (
                             <div>
                               {/* Header controls for browsing mode */}
@@ -677,10 +725,10 @@ function App() {
 
                               {/* Draggable Progress Bar / Range Input for browsing files */}
                               {viewMode === 'single' && commitDetail.files.length > 1 && (
-                                <div className="file-changes-slider-container" style={{ margin: '12px 0 20px 0', padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div className="file-changes-slider-container" style={{ margin: '12px 0 20px 0', padding: '16px', background: 'var(--panel)', borderRadius: 12, border: '1px solid var(--border)' }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 8, color: 'var(--text)' }}>
                                     <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>拖拽进度浏览: <strong>{currentFileIndex + 1}</strong> / {commitDetail.files.length}</span>
-                                    <span style={{ color: '#5B9BD5', fontWeight: 600, minWidth: 0, flex: 1, wordBreak: 'break-all', lineHeight: 1.5 }} title={commitDetail.files[currentFileIndex]?.path}>{commitDetail.files[currentFileIndex]?.path}</span>
+                                    <span style={{ color: 'var(--accent)', fontWeight: 600, minWidth: 0, flex: 1, wordBreak: 'break-all', lineHeight: 1.5 }} title={commitDetail.files[currentFileIndex]?.path}>{commitDetail.files[currentFileIndex]?.path}</span>
                                   </div>
                                   <input
                                     type="range"
@@ -704,8 +752,8 @@ function App() {
                                         <span className={`file-status file-status-${file.status}`}>{file.status}</span>
                                         <span className="file-path">{file.path}</span>
                                         <span style={{ marginLeft: 'auto', fontSize: 12, display: 'flex', gap: 8 }}>
-                                          <span style={{ color: '#4fc1ff' }}><VscDiffAdded size={12} /> {file.additions}</span>
-                                          <span style={{ color: '#ff6b6b' }}><VscDiffRemoved size={12} /> {file.deletions}</span>
+                                          <span style={{ color: 'var(--success)' }}><VscDiffAdded size={12} /> {file.additions}</span>
+                                          <span style={{ color: 'var(--danger)' }}><VscDiffRemoved size={12} /> {file.deletions}</span>
                                           <button className="detail-action-btn" onClick={(e) => { e.stopPropagation(); handleBlame(file.path); }} title="查看 Blame"><VscFileCode size={14} /></button>
                                           <button className="detail-action-btn" onClick={(e) => { e.stopPropagation(); handleTimeline(file.path); }} title="文件时间线"><VscHistory size={14} /></button>
                                         </span>
@@ -751,8 +799,8 @@ function App() {
                                       <span className={`file-status file-status-${file.status}`}>{file.status}</span>
                                       <span className="file-path">{file.path}</span>
                                       <span style={{ marginLeft: 'auto', fontSize: 12, display: 'flex', gap: 8 }}>
-                                        <span style={{ color: '#4fc1ff' }}><VscDiffAdded size={12} /> {file.additions}</span>
-                                        <span style={{ color: '#ff6b6b' }}><VscDiffRemoved size={12} /> {file.deletions}</span>
+                                        <span style={{ color: 'var(--success)' }}><VscDiffAdded size={12} /> {file.additions}</span>
+                                        <span style={{ color: 'var(--danger)' }}><VscDiffRemoved size={12} /> {file.deletions}</span>
                                         <button className="detail-action-btn" onClick={(e) => { e.stopPropagation(); handleBlame(file.path); }} title="查看 Blame"><VscFileCode size={14} /></button>
                                         <button className="detail-action-btn" onClick={(e) => { e.stopPropagation(); handleTimeline(file.path); }} title="文件时间线"><VscHistory size={14} /></button>
                                       </span>
@@ -793,7 +841,7 @@ function App() {
                               )}
                             </div>
                           ) : (
-                            <div style={{ color: 'rgba(255,255,255,0.5)', textAlign: 'center', padding: 20 }}>无法加载详情</div>
+                            <div style={{ color: 'var(--text-dim)', textAlign: 'center', padding: 20 }}>无法加载详情</div>
                           )}
                         </motion.div>
                       )}
@@ -853,7 +901,7 @@ function App() {
 
           {showRebase && (
             <motion.div id="panel-rebase" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} style={{ marginTop: 16 }}>
-              <EnhancedRebase repoPath={repoPath} onComplete={() => { setShowRebase(false); loadRepo(); }} />
+              <EnhancedRebase repoPath={repoPath} onComplete={() => { setShowRebase(false); setActivePanelId(null); loadRepo(); }} />
             </motion.div>
           )}
 
@@ -900,29 +948,29 @@ function App() {
       </div>
 
       <CommandPalette commands={[
-        { id: 'health', label: '仓库健康报告', action: () => { setShowHealth(true); loadHealthReport(); } },
-        { id: 'contributors', label: '贡献者统计', action: () => { setShowContributors(true); loadContributors(); } },
-        { id: 'hotfiles', label: '热点文件', action: () => { setShowHotFiles(true); loadHotFiles(); } },
-        { id: 'stash', label: 'Stash 管理', action: () => { setShowStash(true); loadStashList(); } },
+        { id: 'health', label: '仓库健康报告', action: () => loadHealthReport() },
+        { id: 'contributors', label: '贡献者统计', action: () => loadContributors() },
+        { id: 'hotfiles', label: '热点文件', action: () => loadHotFiles() },
+        { id: 'stash', label: 'Stash 管理', action: () => loadStashList() },
         { id: 'rebase', label: '交互 Rebase', action: () => loadRebaseCommits() },
-        { id: 'search', label: '语义搜索', action: () => setShowSemanticSearch(true) },
-        { id: 'diff', label: '差异对比', action: () => setShowDiffViewer(true) },
-        { id: 'changelog', label: '生成变更日志', action: () => setShowChangelog(true) },
-        { id: 'graph', label: '提交图', action: () => setShowGraph(true) },
-        { id: 'filetree', label: '文件树', action: () => setShowFileTree(true) },
-        { id: 'filter', label: '提交筛选', action: () => setShowCommitFilter(true) },
-        { id: 'tags', label: '标签管理', action: () => setShowTagManager(true) },
-        { id: 'remotes', label: '远程仓库', action: () => setShowRemoteManager(true) },
-        { id: 'multirepo', label: '多仓库', action: () => setShowMultiRepo(true) },
-        { id: 'syntax', label: 'Diff 高亮', action: () => setShowSyntaxHighlight(true) },
-        { id: 'sidebyside', label: '并排对比', action: () => setShowSideBySide(true) },
-        { id: 'hooks', label: 'Git Hooks', action: () => setShowHookManager(true) },
-        { id: 'conflict', label: '冲突解决', action: () => setShowConflictResolver(true) },
-        { id: 'exporthtml', label: '导出 HTML 报告', action: () => setShowExportHTML(true) },
-        { id: 'scripts', label: '脚本扩展', action: () => setShowScriptRunner(true) },
-        { id: 'sql', label: 'SQL 查询', action: () => setShowQueryConsole(true) },
-        { id: 'timemachine', label: '时间机器', action: () => setShowTimeMachine(true) },
-        { id: 'uimanager', label: 'UI 管理', action: () => setShowUIManager(true) },
+        { id: 'semantic', label: '语义搜索', action: () => openPanel('semantic', setShowSemanticSearch) },
+        { id: 'diffviewer', label: '差异对比', action: () => openPanel('diffviewer', setShowDiffViewer) },
+        { id: 'changelog', label: '生成变更日志', action: () => openPanel('changelog', setShowChangelog) },
+        { id: 'graph', label: '提交图', action: () => openPanel('graph', setShowGraph) },
+        { id: 'filetree', label: '文件树', action: () => openPanel('filetree', setShowFileTree) },
+        { id: 'filter', label: '提交筛选', action: () => openPanel('filter', setShowCommitFilter) },
+        { id: 'tags', label: '标签管理', action: () => openPanel('tags', setShowTagManager) },
+        { id: 'remotes', label: '远程仓库', action: () => openPanel('remotes', setShowRemoteManager) },
+        { id: 'multirepo', label: '多仓库', action: () => openPanel('multirepo', setShowMultiRepo) },
+        { id: 'syntax', label: 'Diff 高亮', action: () => openPanel('syntax', setShowSyntaxHighlight) },
+        { id: 'sidebyside', label: '并排对比', action: () => openPanel('sidebyside', setShowSideBySide) },
+        { id: 'hooks', label: 'Git Hooks', action: () => openPanel('hooks', setShowHookManager) },
+        { id: 'conflict', label: '冲突解决', action: () => openPanel('conflict', setShowConflictResolver) },
+        { id: 'export', label: '导出 HTML 报告', action: () => openPanel('export', setShowExportHTML) },
+        { id: 'scripts', label: '脚本扩展', action: () => openPanel('scripts', setShowScriptRunner) },
+        { id: 'sql', label: 'SQL 查询', action: () => openPanel('sql', setShowQueryConsole) },
+        { id: 'timemachine', label: '时间机器', action: () => openPanel('timemachine', setShowTimeMachine) },
+        { id: 'ui', label: 'UI 管理', action: () => openPanel('ui', setShowUIManager) },
       ]} />
 
       {/* <^first open welcoming&> */}

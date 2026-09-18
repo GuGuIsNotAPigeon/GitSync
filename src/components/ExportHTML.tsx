@@ -39,11 +39,11 @@ export default function ExportHTML({ repoPath }: { repoPath: string }) {
       <button className="btn btn-blue" onClick={exportReport} disabled={loading}>
         {loading ? '生成中...' : '生成并复制 HTML'}
       </button>
-      {error && <div className="analysis-item" style={{ color: '#ff6b6b' }}>{error}</div>}
+      {error && <div className="analysis-item" style={{ color: 'var(--danger)' }}>{error}</div>}
       {html && (
         <div style={{ marginTop: 12 }}>
           <div className="section-title">预览</div>
-          <div style={{ maxHeight: 400, overflow: 'auto', background: 'rgba(255,255,255,0.03)', padding: 12, borderRadius: 8, fontSize: 12, whiteSpace: 'pre-wrap' }}>
+          <div style={{ maxHeight: 400, overflow: 'auto', background: 'var(--panel)', padding: 12, borderRadius: 8, fontSize: 12, whiteSpace: 'pre-wrap' }}>
             {html}
           </div>
         </div>

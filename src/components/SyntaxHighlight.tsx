@@ -93,16 +93,16 @@ export default function SyntaxHighlight({ repoPath, commitHash }: { repoPath: st
       <button className="btn btn-blue" onClick={loadDiff} disabled={loading}>
         {loading ? '加载中...' : '加载 Diff'}
       </button>
-      {error && <div className="analysis-item" style={{ color: '#ff6b6b' }}>{error}</div>}
+      {error && <div className="analysis-item" style={{ color: 'var(--danger)' }}>{error}</div>}
       {files.map(([path, detail]) => (
         <div key={path} style={{ marginTop: 12 }}>
           <div className="section-title">{path}</div>
           {detail.hunks.map((hunk, i) => (
-            <div key={i} style={{ fontFamily: 'monospace', fontSize: 12 }}>
+            <div key={i} style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
               {hunk.lines.map((line, j) => (
                 <div key={j} style={{
-                  background: line.origin === '+' ? 'rgba(76,175,80,0.15)' : line.origin === '-' ? 'rgba(244,67,54,0.15)' : 'transparent',
-                  color: line.origin === '+' ? '#81c784' : line.origin === '-' ? '#e57373' : 'var(--text)',
+                  background: line.origin === '+' ? 'var(--diff-add-bg)' : line.origin === '-' ? 'var(--diff-del-bg)' : 'transparent',
+                  color: line.origin === '+' ? 'var(--diff-add-text)' : line.origin === '-' ? 'var(--diff-del-text)' : 'var(--text)',
                   padding: '1px 8px',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-all'

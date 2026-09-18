@@ -97,25 +97,25 @@ export default function UIManager({
               key={option.id}
               onClick={() => handleBgStyleChange(option.id)}
               style={{
-                background: bgStyle === option.id ? 'rgba(91,155,213,0.2)' : 'rgba(255,255,255,0.03)',
-                border: bgStyle === option.id ? '1px solid rgba(91,155,213,0.5)' : '1px solid rgba(255,255,255,0.08)',
+                background: bgStyle === option.id ? 'var(--accent-soft)' : 'var(--panel)',
+                border: bgStyle === option.id ? '1px solid var(--accent-border)' : '1px solid var(--border)',
                 borderRadius: 12,
                 padding: '10px 8px 8px',
                 cursor: 'pointer',
                 transition: 'all 0.25s ease',
                 textAlign: 'center',
-                color: bgStyle === option.id ? '#ffffff' : 'var(--text)',
+                color: 'var(--text)',
               }}
               onMouseEnter={(e) => {
                 if (bgStyle !== option.id) {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.07)';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+                  e.currentTarget.style.background = 'var(--panel-strong)';
+                  e.currentTarget.style.borderColor = 'var(--border-strong)';
                 }
               }}
               onMouseLeave={(e) => {
                 if (bgStyle !== option.id) {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.background = 'var(--panel)';
+                  e.currentTarget.style.borderColor = 'var(--border)';
                 }
               }}
             >
@@ -136,7 +136,7 @@ export default function UIManager({
                   />
                 )}
                 {option.id === 'md' && (
-                  <div style={{ width: '100%', height: '100%', background: 'linear-gradient(145deg, #1a1a2e, #16213e, #0f3460)' }} />
+                  <div style={{ width: '100%', height: '100%', background: 'linear-gradient(145deg, var(--grad-a), var(--grad-b), var(--grad-c))' }} />
                 )}
                 {option.id === 'custom' && (
                   bgBase64 ? (
@@ -149,12 +149,12 @@ export default function UIManager({
                     <div style={{
                       width: '100%',
                       height: '100%',
-                      background: 'rgba(255,255,255,0.05)',
+                      background: 'var(--panel)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontSize: 24,
-                      color: 'rgba(255,255,255,0.2)',
+                      color: 'var(--text-faint)',
                     }}>
                       +
                     </div>
@@ -184,14 +184,14 @@ export default function UIManager({
             setBgOpacity(val);
             localStorage.setItem('bg_opacity', String(val));
           }}
-          style={{ width: '100%', accentColor: '#5B9BD5' }}
+          style={{ width: '100%', accentColor: 'var(--accent)' }}
         />
       </div>
 
       <div className="analysis-section" style={{ marginTop: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
           <VscLightbulb size={14} style={{ color: 'var(--text-dim)' }} />
-          <span className="section-title" style={{ marginBottom: 0 }}>手电筒范围</span>
+            <span className="section-title" style={{ marginBottom: 0 }}>手电筒范围</span>
           <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-dim)' }}>{torchSize}px</span>
         </div>
         <input
@@ -204,7 +204,7 @@ export default function UIManager({
             setTorchSize(val);
             localStorage.setItem('torch_size', String(val));
           }}
-          style={{ width: '100%', accentColor: '#5B9BD5' }}
+          style={{ width: '100%', accentColor: 'var(--accent)' }}
         />
 
       </div>
@@ -227,8 +227,8 @@ export default function UIManager({
               className="btn"
               onClick={handleResetBackground}
               style={{
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: 'var(--panel)',
+                border: '1px solid var(--border)',
                 borderRadius: 6,
                 color: 'var(--text)',
                 cursor: 'pointer',
@@ -245,9 +245,9 @@ export default function UIManager({
               height: 48,
               borderRadius: 8,
               overflow: 'hidden',
-              border: '1px solid rgba(255,255,255,0.1)',
+              border: '1px solid var(--border-strong)',
               flexShrink: 0,
-              background: '#1a1a2e',
+              background: 'var(--grad-a)',
             }}
           >
             <img
@@ -258,7 +258,7 @@ export default function UIManager({
           </div>
         </div>
         {customBgError && (
-          <div style={{ marginTop: 10, color: '#ff6b6b', fontSize: 12 }}>
+          <div style={{ marginTop: 10, color: 'var(--danger)', fontSize: 12 }}>
             {customBgError}
           </div>
         )}
@@ -294,15 +294,15 @@ export default function UIManager({
                     width: 36,
                     height: 36,
                     borderRadius: '50%',
-                    background: t.bg,
-                    border: theme === t.id ? '2px solid #5B9BD5' : '2px solid rgba(255,255,255,0.15)',
+                  background: t.bg,
+                  border: theme === t.id ? '2px solid var(--accent)' : '2px solid var(--border-strong)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     transition: 'border 0.2s',
                   }}
                 >
-                  {theme === t.id && <VscCheck size={16} style={{ color: t.id === 'dark' ? '#5B9BD5' : '#333' }} />}
+                  {theme === t.id && <VscCheck size={16} style={{ color: t.id === 'dark' ? 'var(--accent)' : 'var(--text)' }} />}
                 </div>
                 <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{t.label}</span>
               </button>
@@ -330,7 +330,7 @@ export default function UIManager({
                 width: 44,
                 height: 24,
                 borderRadius: 12,
-                background: panelMode === 'stack' ? '#5B9BD5' : 'rgba(255,255,255,0.15)',
+                background: panelMode === 'stack' ? 'var(--accent)' : 'var(--border-strong)',
                 border: 'none',
                 cursor: 'pointer',
                 transition: 'background 0.25s',

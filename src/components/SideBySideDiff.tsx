@@ -30,13 +30,13 @@ export default function SideBySideDiff({ repoPath, commitHash }: { repoPath: str
       <button className="btn btn-blue" onClick={load} disabled={loading}>
         {loading ? '加载中...' : '加载对比'}
       </button>
-      {error && <div className="analysis-item" style={{ color: '#ff6b6b' }}>{error}</div>}
+      {error && <div className="analysis-item" style={{ color: 'var(--danger)' }}>{error}</div>}
       {files.map(([path, detail]) => (
         <div key={path} style={{ marginTop: 12 }}>
           <div className="section-title">{path}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, fontFamily: 'monospace', fontSize: 12 }}>
-            <div style={{ background: 'rgba(244,67,54,0.05)', padding: 8 }}><pre>{detail.old_content}</pre></div>
-            <div style={{ background: 'rgba(76,175,80,0.05)', padding: 8 }}><pre>{detail.new_content}</pre></div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+            <div style={{ background: 'var(--danger-dim)', padding: 8 }}><pre>{detail.old_content}</pre></div>
+            <div style={{ background: 'var(--success-dim)', padding: 8 }}><pre>{detail.new_content}</pre></div>
           </div>
         </div>
       ))}

@@ -83,10 +83,10 @@ export default function ConflictResolver({ repoPath }: { repoPath: string }) {
     <motion.div className="analysis-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
       <h3>图形化冲突解决</h3>
       <button className="btn btn-blue" onClick={load}>加载冲突文件</button>
-      {error && <div className="analysis-item" style={{ color: '#ff6b6b' }}>{error}</div>}
+      {error && <div className="analysis-item" style={{ color: 'var(--danger)' }}>{error}</div>}
 
       {files.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
           {files.map(f => (
             <button
               key={f.path}
@@ -104,26 +104,26 @@ export default function ConflictResolver({ repoPath }: { repoPath: string }) {
         <div style={{ marginTop: 12 }}>
           <div className="section-title" style={{ marginBottom: 8 }}>{activeFile.path}</div>
           {activeFile.conflict_blocks.map((block, i) => (
-            <div key={i} style={{ marginBottom: 16, border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, background: 'rgba(255,255,255,0.02)' }}>
-                <div style={{ padding: 8, fontSize: 12, color: 'var(--text-dim)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>当前分支 (ours)</div>
-                <div style={{ padding: 8, fontSize: 12, color: 'var(--text-dim)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>合并结果</div>
-                <div style={{ padding: 8, fontSize: 12, color: 'var(--text-dim)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>传入分支 (theirs)</div>
+            <div key={i} style={{ marginBottom: 16, border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, background: 'var(--panel)' }}>
+                <div style={{ padding: 8, fontSize: 12, color: 'var(--text-dim)', borderBottom: '1px solid var(--border-faint)' }}>当前分支 (ours)</div>
+                <div style={{ padding: 8, fontSize: 12, color: 'var(--text-dim)', borderBottom: '1px solid var(--border-faint)' }}>合并结果</div>
+                <div style={{ padding: 8, fontSize: 12, color: 'var(--text-dim)', borderBottom: '1px solid var(--border-faint)' }}>传入分支 (theirs)</div>
 
-                <div style={{ background: 'rgba(244,67,54,0.08)', padding: 10, fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                <div style={{ background: 'var(--danger-dim)', padding: 10, fontFamily: 'var(--font-mono)', fontSize: 12, whiteSpace: 'pre-wrap' }}>
                   {block.ours_text}
                   <button className="btn btn-blue" onClick={() => applyOurs(i)} style={{ display: 'block', marginTop: 8, width: '100%', fontSize: 11, padding: '4px 8px' }}>采用此边 →</button>
                 </div>
 
-                <div style={{ background: 'rgba(255,255,255,0.03)', padding: 10, fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                <div style={{ background: 'var(--panel)', padding: 10, fontFamily: 'var(--font-mono)', fontSize: 12, whiteSpace: 'pre-wrap' }}>
                   <textarea
                     value={resolutions[i] || ''}
                     onChange={e => { const newRes = [...resolutions]; newRes[i] = e.target.value; setResolutions(newRes); }}
-                    style={{ width: '100%', minHeight: 80, background: 'transparent', color: 'var(--text)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: 6, fontFamily: 'inherit', fontSize: 'inherit', resize: 'vertical' }}
+                    style={{ width: '100%', minHeight: 80, background: 'transparent', color: 'var(--text)', border: '1px solid var(--border-strong)', borderRadius: 6, padding: 6, fontFamily: 'inherit', fontSize: 'inherit', resize: 'vertical' }}
                   />
                 </div>
 
-                <div style={{ background: 'rgba(76,175,80,0.08)', padding: 10, fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                <div style={{ background: 'var(--success-dim)', padding: 10, fontFamily: 'var(--font-mono)', fontSize: 12, whiteSpace: 'pre-wrap' }}>
                   {block.theirs_text}
                   <button className="btn btn-blue" onClick={() => applyTheirs(i)} style={{ display: 'block', marginTop: 8, width: '100%', fontSize: 11, padding: '4px 8px' }}>采用此边 →</button>
                 </div>
@@ -131,9 +131,9 @@ export default function ConflictResolver({ repoPath }: { repoPath: string }) {
             </div>
           ))}
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button className="btn" onClick={applyAllOurs} style={{ background: 'rgba(244,67,54,0.15)', color: '#ff6b6b', border: '1px solid rgba(244,67,54,0.2)', borderRadius: 8, padding: '6px 14px', fontSize: 12, cursor: 'pointer' }}>全部采用当前分支</button>
-            <button className="btn" onClick={applyAllTheirs} style={{ background: 'rgba(76,175,80,0.15)', color: '#4caf50', border: '1px solid rgba(76,175,80,0.2)', borderRadius: 8, padding: '6px 14px', fontSize: 12, cursor: 'pointer' }}>全部采用传入分支</button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={applyAllOurs} style={{ background: 'var(--danger-soft)', color: 'var(--danger)', border: '1px solid var(--danger-border)', borderRadius: 8, padding: '6px 14px', fontSize: 12, cursor: 'pointer' }}>全部采用当前分支</button>
+            <button className="btn" onClick={applyAllTheirs} style={{ background: 'var(--success-dim)', color: 'var(--success)', border: '1px solid var(--success-border)', borderRadius: 8, padding: '6px 14px', fontSize: 12, cursor: 'pointer' }}>全部采用传入分支</button>
             <button className="btn btn-blue" onClick={save} style={{ marginLeft: 'auto' }}>保存并标记已解决</button>
           </div>
         </div>

@@ -39,7 +39,7 @@ export default function ScriptRunner({ repoPath }: { repoPath: string }) {
       <p style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 8 }}>
         将脚本放入 ~/.git-tool/scripts 目录后点击“加载脚本”
       </p>
-      {error && <div className="analysis-item" style={{ color: '#ff6b6b' }}>{error}</div>}
+      {error && <div className="analysis-item" style={{ color: 'var(--danger)' }}>{error}</div>}
       {scripts.map(s => (
         <div key={s} className="analysis-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>{s}</span>
@@ -51,7 +51,7 @@ export default function ScriptRunner({ repoPath }: { repoPath: string }) {
       {output && (
         <div style={{ marginTop: 12 }}>
           <div className="section-title">输出</div>
-          <pre style={{ background: 'rgba(255,255,255,0.03)', padding: 12, borderRadius: 8, fontSize: 12, whiteSpace: 'pre-wrap', maxHeight: 400, overflow: 'auto' }}>
+          <pre style={{ background: 'var(--panel)', padding: 12, borderRadius: 8, fontSize: 12, whiteSpace: 'pre-wrap', maxHeight: 400, overflow: 'auto', fontFamily: 'var(--font-mono)' }}>
             {output}
           </pre>
         </div>
