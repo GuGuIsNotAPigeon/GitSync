@@ -42,6 +42,11 @@ export default function EnhancedRebase({ repoPath, onComplete }: { repoPath: str
       setError('请先加载提交');
       return;
     }
+    // 后端要求 squash 前必须有 pick/reword；拖拽 reorder 可能把 squash 行拖到首位，提前拦截
+    if (ops[0]?.action === 'squash') {
+      setError('第一个提交不能是 squash，请先选一个 pick/reword 开头，或调整顺序');
+      return;
+    }
     // rebase 会重写最近 N 个提交，属破坏性操作，先确认
     const dropCount = ops.filter(o => o.action === 'drop').length;
     const summary = dropCount > 0 ? `（其中 ${dropCount} 个将被丢弃）` : '';
@@ -76,7 +81,8 @@ export default function EnhancedRebase({ repoPath, onComplete }: { repoPath: str
               <span className="hash">{op.hash.substring(0, 8)}</span>
               <select value={op.action} onChange={(e) => updateOp(idx, { action: e.target.value })}>
                 <option value="pick">pick</option>
-                <option value="squash">squash</option>
+                {/* squash 需要合并到前一个提交，第一行没有可合并对象 */}
+                <option value="squash" disabled={idx === 0}>squash</option>
                 <option value="drop">drop</option>
                 <option value="reword">reword</option>
               </select>
