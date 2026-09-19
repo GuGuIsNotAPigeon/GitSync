@@ -140,6 +140,8 @@ function App() {
 
   // 分页状态
   const [hasMore, setHasMore] = useState(true);
+  const [totalCommits, setTotalCommits] = useState(0);
+  const pageRef = useRef(0);
   const PAGE_SIZE = 30;
 
   const [order, setOrder] = useState<number[]>([]);
@@ -163,6 +165,7 @@ function App() {
     const targetPath = pathOverride ?? repoPath;
     if (!targetPath.trim()) return;
     if (!reset && !hasMore) return;
+    pageRef.current = pageNum;
     setLoading(true);
     setError('');
     try {
@@ -185,6 +188,7 @@ function App() {
         setCommits(prev => [...prev, ...pageData]);
       }
       setHasMore((pageNum + 1) * PAGE_SIZE < total);
+      setTotalCommits(total);
     } catch (e: any) {
       // Tauri IPC 层错误可能是 Error 对象，塞进 state 会让 React 渲染崩溃
       setError(String(e));
@@ -196,6 +200,7 @@ function App() {
     const targetPath = pathOverride ?? repoPath;
     if (!targetPath.trim()) return;
     setHasMore(true);
+    setTotalCommits(0);
     setCommits([]);
     setSelectedCommit(null);
     setCommitDetail(null);
@@ -427,6 +432,9 @@ function App() {
     try {
       const result = await invoke<Commit[]>('search_commits', { path: repoPath, query: searchQuery });
       setCommits(result);
+      // 搜索结果是独立的筛选视图（上限 50 条），与分页流无关
+      setHasMore(false);
+      setTotalCommits(result.length);
       setSelectedCommit(null);
       setCommitDetail(null);
     } catch (e: any) { setError(String(e)); } finally { setLoading(false); }
@@ -660,7 +668,7 @@ function App() {
               <button className="error-close" onClick={() => setError('')} aria-label="关闭错误提示">×</button>
             </motion.div>
           )}
-          {commits.length > 0 && (<div className="status-bar"><span className="status-dot" /><VscGitCommit size={14} />{commits.length} 个提交</div>)}
+          {commits.length > 0 && (<div className="status-bar"><span className="status-dot" /><VscGitCommit size={14} />{totalCommits > commits.length ? `已显示 ${commits.length} / 共 ${totalCommits} 个提交` : `${commits.length} 个提交`}</div>)}
           {commits.length === 0 && !error && !loading && (<div className="empty-state"><VscEmptyWindow size={48} /><p style={{ marginTop: 12 }}>输入仓库路径并加载，查看提交历史</p></div>)}
           <div className="commit-list">
             <AnimatePresence>
@@ -852,6 +860,16 @@ function App() {
             </AnimatePresence>
           </div>
 
+          {hasMore && !loading && commits.length > 0 && (
+            <button
+              className="btn btn-blue"
+              style={{ margin: '16px auto', display: 'block' }}
+              onClick={() => loadCommitsPage(pageRef.current + 1, false)}
+            >
+              加载更多（已显示 {commits.length} / 共 {totalCommits}）
+            </button>
+          )}
+
           {showHealth && healthReport && (
             <motion.div id="panel-health" className="analysis-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
               <h3>仓库健康报告</h3>
@@ -918,7 +936,7 @@ function App() {
               )}
             </div>
           )}
-          {showCommitFilter && <div id="panel-filter"><CommitFilter repoPath={repoPath} onFiltered={(commits) => setCommits(commits)} /></div>}
+          {showCommitFilter && <div id="panel-filter"><CommitFilter repoPath={repoPath} onFiltered={(filtered) => { setCommits(filtered); setTotalCommits(filtered.length); setHasMore(false); setSelectedCommit(null); setCommitDetail(null); }} /></div>}
           {showTagManager && <div id="panel-tags"><TagManager repoPath={repoPath} /></div>}
           {showRemoteManager && <div id="panel-remotes"><RemoteManager repoPath={repoPath} /></div>}
           {showMultiRepo && <div id="panel-multirepo"><MultiRepo onSelectRepo={(path) => { setRepoPath(path); loadRepo(path); }} /></div>}
