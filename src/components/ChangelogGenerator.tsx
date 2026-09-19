@@ -11,35 +11,43 @@ interface ChangelogEntry {
 export default function ChangelogGenerator({ repoPath }: { repoPath: string }) {
   const [entries, setEntries] = useState<ChangelogEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const generate = async () => {
     setLoading(true);
+    setError('');
     try {
       const res = await invoke<ChangelogEntry[]>('generate_changelog', { path: repoPath, count: 100 });
       setEntries(res);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e: any) {
+      setError(String(e));
+    } finally { setLoading(false); }
   };
 
-  const copyToClipboard = () => {
+  const copyToClipboard = async () => {
     let md = "# Changelog\n\n";
     entries.forEach(e => {
       md += `## ${e.date}\n`;
-      e.messages.forEach(m => md += `- ${m}\n`);
+      e.messages.forEach(m => md += `- ${m.split('\n')[0]}\n`);
       md += "\n";
     });
-    navigator.clipboard.writeText(md);
-    alert('Changelog 已复制到剪贴板');
+    try {
+      await navigator.clipboard.writeText(md);
+      alert('Changelog 已复制到剪贴板');
+    } catch {
+      setError('复制到剪贴板失败，请重试');
+    }
   };
 
   return (
     <motion.div className="analysis-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
       <h3>生成变更日志</h3>
-      <button className="btn btn-blue" onClick={generate} disabled={loading} style={{ marginBottom: 12 }}>生成</button>
+      <button className="btn btn-blue" onClick={generate} disabled={loading} style={{ marginBottom: 12 }}>{loading ? '生成中...' : '生成'}</button>
+      {error && <div className="analysis-item" style={{ color: 'var(--danger)' }}>{error}</div>}
       {entries.map((e, i) => (
         <div key={i} className="analysis-item">
           <span className="section-title">{e.date}</span>
-          {e.messages.map((m, j) => <div key={j} className="message">- {m}</div>)}
+          {e.messages.map((m, j) => <div key={j} className="message">- {m.split('\n')[0]}</div>)}
         </div>
       ))}
       {entries.length > 0 && <button className="btn btn-blue" onClick={copyToClipboard}>复制到剪贴板</button>}
