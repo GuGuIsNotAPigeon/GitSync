@@ -455,7 +455,10 @@ fn get_file_timeline_impl(repo: &Repository, file_path: &str) -> Result<Vec<File
                     .map_err(|e| format!("Patch 创建失败: {}", e))?;
                 if let Some(mut p) = patch {
                     let mut diff_content = Vec::new();
+                    // 与 get_commit_detail 一致：每行加 origin 前缀（+/-/空格/@@），
+                    // 否则前端 parseAndRenderDiff 会把所有行当未分类丢弃，时间线 diff 显示为空
                     p.print(&mut |_delta, _hunk, line| {
+                        diff_content.push(line.origin() as u8);
                         diff_content.extend_from_slice(line.content());
                         true
                     })
@@ -2922,6 +2925,25 @@ mod backend_fix_tests {
         assert_eq!(local.get().peel_to_commit().unwrap().id(), Oid::from_str(&feat_tip).unwrap());
         assert_eq!(local.upstream().unwrap().name().unwrap().unwrap(), "origin/feat");
         assert_eq!(std::fs::read_to_string(dir.path().join("a.txt")).unwrap(), "feature\n", "工作区应更新到 feat");
+    }
+
+    #[test]
+    fn file_timeline_diff_has_line_prefixes() {
+        // 回归：timeline diff 不带 +/-/@@ 前缀时，前端 parseAndRenderDiff 会把所有行当未分类丢弃
+        let dir = tempfile::tempdir().unwrap();
+        let repo = git2::Repository::init(dir.path()).unwrap();
+        commit(&repo, "base", 1_700_000_000, &[("a.txt", "alpha\n")]);
+        commit(&repo, "add line", 1_700_000_100, &[("a.txt", "alpha\nbeta\n")]);
+
+        let entries = get_file_timeline_impl(&repo, "a.txt").unwrap();
+        assert_eq!(entries.len(), 2);
+        // entries[0] 是最新提交：+beta。文件头/hunk 头分别带 'F'/'H' 前缀（前端按未分类丢弃，与提交详情一致），
+        // 增删行必须带 '+'/'-'/' ' 前缀才会被渲染
+        let diff = &entries[0].diff;
+        assert!(diff.contains("@@ -1 +1,2 @@"), "应包含 hunk 头内容: {:?}", diff);
+        assert!(diff.lines().any(|l| l.starts_with('+')), "新增行应带 + 前缀: {:?}", diff);
+        assert!(diff.lines().any(|l| l.starts_with(' ')), "上下文行应带空格前缀: {:?}", diff);
+        assert!(entries[1].diff.lines().any(|l| l.starts_with('+')), "首个提交的 diff 也应带前缀");
     }
 
     #[test]
