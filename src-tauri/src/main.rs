@@ -511,6 +511,10 @@ async fn get_health_report(path: String) -> Result<HealthReport, String> {
     get_health_report_impl(&repo)
 }
 
+// 无上游的本地分支只有 tip 提交超过这个天数（即长期搁置）才算废弃；
+// 刚建的新分支没有 upstream 是常态，不应点名
+const STALE_BRANCH_DAYS: i64 = 14;
+
 fn get_health_report_impl(repo: &Repository) -> Result<HealthReport, String> {
     let mut large_files = Vec::new();
     let mut conflicts = Vec::new();
@@ -546,14 +550,23 @@ fn get_health_report_impl(repo: &Repository) -> Result<HealthReport, String> {
         .head()
         .ok()
         .and_then(|h| h.shorthand().ok().map(|s| s.to_string()));
+    let stale_cutoff = chrono::Utc::now().timestamp() - STALE_BRANCH_DAYS * 24 * 3600;
     if let Ok(branches) = repo.branches(Some(git2::BranchType::Local)) {
         for branch in branches {
             if let Ok((branch, _)) = branch {
                 let name = branch.name().map_err(|e| format!("分支名错误: {}", e))?;
                 let name = name.unwrap_or("未知").to_string();
                 // 只看本地分支：远程跟踪分支天然没有 upstream 配置；
-                // 当前分支没有 upstream 是常态，不算废弃
-                if Some(&name) != head_name.as_ref() && branch.upstream().is_err() {
+                // 当前分支没有 upstream 是常态，不算废弃；
+                // tip 提交很新的分支说明还在活跃开发，也不算废弃
+                if Some(&name) != head_name.as_ref()
+                    && branch.upstream().is_err()
+                    && branch
+                        .get()
+                        .peel_to_commit()
+                        .map(|c| c.time().seconds() < stale_cutoff)
+                        .unwrap_or(false)
+                {
                     stale_branches.push(name);
                 }
             }
@@ -3034,12 +3047,17 @@ mod backend_fix_tests {
         let head_oid = repo.head().unwrap().peel_to_commit().unwrap().id();
         repo.branch("feature", &repo.find_commit(head_oid).unwrap(), false).unwrap();
         repo.reference("refs/remotes/origin/feat", head_oid, true, "test").unwrap();
+        // 刚提交的新分支（tip 是刚刚）即使没有上游也不应算废弃；
+        // commit() 辅助是从零建树，fresh 提交需带上 big.bin 才能保住大文件断言
+        let fresh = commit(&repo, "fresh work", chrono::Utc::now().timestamp(), &[("big.bin", &big), ("a.txt", "x\n"), ("fresh.txt", "1\n")]);
+        repo.branch("fresh-branch", &repo.find_commit(Oid::from_str(&fresh).unwrap()).unwrap(), false).unwrap();
 
         let report = get_health_report_impl(&repo).unwrap();
         assert!(report.large_files.iter().any(|f| f == "big.bin"), "应遍历 HEAD 树发现大文件，实际: {:?}", report.large_files);
         let cur = repo.head().unwrap().shorthand().unwrap().to_string();
         assert!(!report.stale_branches.iter().any(|b| *b == cur), "当前分支不应算废弃分支");
-        assert!(report.stale_branches.iter().any(|b| b == "feature"));
+        assert!(report.stale_branches.iter().any(|b| b == "feature"), "长期无提交且无上游的分支应算废弃，实际: {:?}", report.stale_branches);
+        assert!(!report.stale_branches.iter().any(|b| b == "fresh-branch"), "新建分支不应算废弃，实际: {:?}", report.stale_branches);
         assert!(!report.stale_branches.iter().any(|b| b.starts_with("origin/")), "远程跟踪分支不应出现在无上游列表");
     }
 
