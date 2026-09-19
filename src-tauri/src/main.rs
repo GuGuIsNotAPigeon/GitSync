@@ -237,7 +237,7 @@ fn checkout_branch(path: String, branch_name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn get_commit_detail(path: String, commit_hash: String) -> Result<CommitDetail, String> {
+async fn get_commit_detail(path: String, commit_hash: String) -> Result<CommitDetail, String> {
     let expanded = shellexpand::tilde(&path).to_string();
     let repo = Repository::open(Path::new(&expanded))
         .map_err(|e| format!("无法打开仓库: {}", e))?;
@@ -348,8 +348,9 @@ struct BlameLine {
     content: String,
 }
 
+// 全文件逐行 blame，属重活；async 命令运行在线程池，避免卡住 UI 主线程
 #[tauri::command]
-fn get_blame(path: String, file_path: String) -> Result<Vec<BlameLine>, String> {
+async fn get_blame(path: String, file_path: String) -> Result<Vec<BlameLine>, String> {
     let expanded = shellexpand::tilde(&path).to_string();
     let repo = Repository::open(Path::new(&expanded))
         .map_err(|e| format!("无法打开仓库: {}", e))?;
@@ -501,8 +502,9 @@ struct HealthReport {
     conflicts: Vec<String>,
 }
 
+// 大文件扫描遍历 HEAD 树全量，属重活；async 命令运行在线程池，避免卡住 UI 主线程
 #[tauri::command]
-fn get_health_report(path: String) -> Result<HealthReport, String> {
+async fn get_health_report(path: String) -> Result<HealthReport, String> {
     let expanded = shellexpand::tilde(&path).to_string();
     let repo = Repository::open(Path::new(&expanded))
         .map_err(|e| format!("无法打开仓库: {}", e))?;
@@ -1098,7 +1100,7 @@ struct DiffResult {
 }
 
 #[tauri::command]
-fn compare_commits(path: String, commit_a: String, commit_b: String) -> Result<DiffResult, String> {
+async fn compare_commits(path: String, commit_a: String, commit_b: String) -> Result<DiffResult, String> {
     let expanded = shellexpand::tilde(&path).to_string();
     let repo = Repository::open(Path::new(&expanded))
         .map_err(|e| format!("无法打开仓库: {}", e))?;
@@ -1185,7 +1187,7 @@ struct GraphCommit {
 }
 
 #[tauri::command]
-fn get_graph_commits(path: String) -> Result<Vec<GraphCommit>, String> {
+async fn get_graph_commits(path: String) -> Result<Vec<GraphCommit>, String> {
     let expanded = shellexpand::tilde(&path).to_string();
     let repo = Repository::open(Path::new(&expanded)).map_err(|e| format!("无法打开仓库: {}", e))?;
     let mut revwalk = repo.revwalk().map_err(|e| format!("无法创建 revwalk: {}", e))?;
@@ -1219,8 +1221,9 @@ struct TreeNode {
     children: Vec<TreeNode>,
 }
 
+// 全树递归构建，属重活；async 命令运行在线程池，避免卡住 UI 主线程
 #[tauri::command]
-fn get_file_tree(path: String) -> Result<Vec<TreeNode>, String> {
+async fn get_file_tree(path: String) -> Result<Vec<TreeNode>, String> {
     let expanded = shellexpand::tilde(&path).to_string();
     let repo = Repository::open(Path::new(&expanded)).map_err(|e| format!("无法打开仓库: {}", e))?;
     let head = repo.head().map_err(|e| format!("无法获取 HEAD: {}", e))?;
@@ -1250,8 +1253,9 @@ fn get_file_tree(path: String) -> Result<Vec<TreeNode>, String> {
     build_tree(&tree, &repo, "")
 }
 
+// 筛选含文件路径过滤时要做两遍全量 diff，属重活；async 命令运行在线程池，避免卡住 UI 主线程
 #[tauri::command]
-fn filter_commits(path: String, author: Option<String>, date_from: Option<String>, date_to: Option<String>, file_path: Option<String>) -> Result<Vec<Commit>, String> {
+async fn filter_commits(path: String, author: Option<String>, date_from: Option<String>, date_to: Option<String>, file_path: Option<String>) -> Result<Vec<Commit>, String> {
     let expanded = shellexpand::tilde(&path).to_string();
     let repo = Repository::open(Path::new(&expanded))
         .map_err(|e| format!("无法打开仓库: {}", e))?;
@@ -1597,8 +1601,9 @@ fn parse_hunk_header(header: &str) -> (usize, usize, usize, usize) {
     (old_start, old_lines, new_start, new_lines)
 }
 
+// 全历史 revwalk 统计总数，大仓库属重活；async 命令运行在线程池，避免卡住 UI 主线程
 #[tauri::command]
-fn get_commits_paginated(path: String, page: usize, page_size: usize) -> Result<(Vec<Commit>, usize), String> {
+async fn get_commits_paginated(path: String, page: usize, page_size: usize) -> Result<(Vec<Commit>, usize), String> {
     let expanded = shellexpand::tilde(&path).to_string();
     let repo = Repository::open(Path::new(&expanded))
         .map_err(|e| format!("无法打开仓库: {}", e))?;
@@ -1885,23 +1890,30 @@ fn list_scripts() -> Result<Vec<String>, String> {
     Ok(scripts)
 }
 
-#[tauri::command]
-fn run_script(path: String, script_name: String) -> Result<String, String> {
-    let expanded = shellexpand::tilde(&path).to_string();
+fn run_script_impl(path: &str, script_name: &str) -> Result<String, String> {
+    let expanded = shellexpand::tilde(path).to_string();
     let scripts_dir = shellexpand::tilde("~/.git-tool/scripts").to_string();
-    let relative = safe_relative_path(&script_name)?;
+    let relative = safe_relative_path(script_name)?;
     let script_path = resolve_existing_under(Path::new(&scripts_dir), &relative)?;
 
     let output = std::process::Command::new(&script_path)
         .arg(&expanded)
         .output()
         .map_err(|e| format!("执行脚本失败: {}", e))?;
-    
+
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).to_string());
     }
-    
+
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+// 脚本可能长时间运行：阻塞进程等待放 spawn_blocking，避免卡住 async runtime / UI
+#[tauri::command]
+async fn run_script(path: String, script_name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || run_script_impl(&path, &script_name))
+        .await
+        .map_err(|e| format!("脚本任务调度失败: {}", e))?
 }
 
 // ====================
@@ -2088,8 +2100,9 @@ fn format_sql_error(e: &rusqlite::Error) -> String {
     }
 }
 
+// 收集全量数据入内存 SQLite + 执行查询，属重活；async 命令运行在线程池，避免卡住 UI 主线程
 #[tauri::command]
-fn git_query(path: String, sql: String) -> Result<QueryResult, String> {
+async fn git_query(path: String, sql: String) -> Result<QueryResult, String> {
     let start = std::time::Instant::now();
 
     let expanded = shellexpand::tilde(&path).to_string();
@@ -2222,8 +2235,9 @@ fn get_file_content(path: String, file_path: String) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&content).to_string())
 }
 
+// 全历史 revwalk 找时间点，属重活；async 命令运行在线程池，避免卡住 UI 主线程
 #[tauri::command]
-fn get_time_machine_snapshot(path: String, timestamp: i64) -> Result<TimeMachineSnapshot, String> {
+async fn get_time_machine_snapshot(path: String, timestamp: i64) -> Result<TimeMachineSnapshot, String> {
     let expanded = shellexpand::tilde(&path).to_string();
     let repo = Repository::open(Path::new(&expanded))
         .map_err(|e| format!("无法打开仓库: {}", e))?;
@@ -2523,7 +2537,7 @@ mod query_tests {
     }
 
     fn query(dir: &Path, sql: &str) -> Result<QueryResult, String> {
-        git_query(dir.to_str().unwrap().to_string(), sql.to_string())
+        tauri::async_runtime::block_on(git_query(dir.to_str().unwrap().to_string(), sql.to_string()))
     }
 
     #[test]
@@ -2759,8 +2773,8 @@ mod path_safety_tests {
         let dir = tempfile::tempdir().unwrap();
         let repo_str = dir.path().to_str().unwrap().to_string();
         // 目录外/不存在的脚本一律拒绝，绝不执行
-        assert!(run_script(repo_str.clone(), "../../usr/bin/env".to_string()).is_err());
-        assert!(run_script(repo_str, "/bin/sh".to_string()).is_err());
+        assert!(run_script_impl(&repo_str, "../../usr/bin/env").is_err());
+        assert!(run_script_impl(&repo_str, "/bin/sh").is_err());
     }
 }
 
@@ -2845,7 +2859,7 @@ mod backend_fix_tests {
         let second = commit(&repo, "delete b", 1_700_000_100, &[("keep.txt", "x\n")]);
         let path = dir.path().to_str().unwrap().to_string();
 
-        let detail = get_commit_detail(path.clone(), second.clone()).unwrap();
+        let detail = tauri::async_runtime::block_on(get_commit_detail(path.clone(), second.clone())).unwrap();
         let deleted = detail.files.iter().find(|f| f.status == "D").expect("应有删除条目");
         assert_eq!(deleted.path, "b.txt", "删除文件应显示原路径而非「未知文件」");
 
@@ -2899,9 +2913,9 @@ mod backend_fix_tests {
                 .format("%Y-%m-%d")
                 .to_string()
         };
-        let res = filter_commits(path.clone(), None, None, Some(day_of(1_760_086_400)), None).unwrap();
+        let res = tauri::async_runtime::block_on(filter_commits(path.clone(), None, None, Some(day_of(1_760_086_400)), None)).unwrap();
         assert_eq!(res.len(), 2, "date_to 当天的提交不应被排除");
-        let res = filter_commits(path.clone(), None, None, Some(day_of(1_760_000_000)), None).unwrap();
+        let res = tauri::async_runtime::block_on(filter_commits(path.clone(), None, None, Some(day_of(1_760_000_000)), None)).unwrap();
         assert_eq!(res.len(), 1);
     }
 
@@ -2915,7 +2929,7 @@ mod backend_fix_tests {
         let path = dir.path().to_str().unwrap().to_string();
 
         // 与 git log -- a.txt 语义一致：创建该文件的提交也算「改过」
-        let res = filter_commits(path, None, None, None, Some("a.txt".into())).unwrap();
+        let res = tauri::async_runtime::block_on(filter_commits(path, None, None, None, Some("a.txt".into()))).unwrap();
         let hashes: std::collections::HashSet<String> = res.iter().map(|c| c.hash.clone()).collect();
         assert_eq!(hashes, [base, c2].into_iter().collect());
         assert!(!hashes.contains(&c3), "只改 b.txt 的提交不应命中");
@@ -2990,7 +3004,7 @@ mod backend_fix_tests {
         let head_time = 1_700_000_000i64;
         let path = dir.path().to_str().unwrap().to_string();
 
-        let snap = get_time_machine_snapshot(path, head_time).unwrap();
+        let snap = tauri::async_runtime::block_on(get_time_machine_snapshot(path, head_time)).unwrap();
         assert_eq!(snap.commit_hash, head);
         assert!(
             snap.files.iter().any(|f| f.path == "docs/guide/intro.md"),
@@ -3021,7 +3035,7 @@ mod backend_fix_tests {
         repo.branch("feature", &repo.find_commit(head_oid).unwrap(), false).unwrap();
         repo.reference("refs/remotes/origin/feat", head_oid, true, "test").unwrap();
 
-        let report = get_health_report(dir.path().to_str().unwrap().to_string()).unwrap();
+        let report = get_health_report_impl(&repo).unwrap();
         assert!(report.large_files.iter().any(|f| f == "big.bin"), "应遍历 HEAD 树发现大文件，实际: {:?}", report.large_files);
         let cur = repo.head().unwrap().shorthand().unwrap().to_string();
         assert!(!report.stale_branches.iter().any(|b| *b == cur), "当前分支不应算废弃分支");
@@ -3050,13 +3064,13 @@ mod backend_fix_tests {
         let hashes = big_repo(dir.path(), 150);
         let path = dir.path().to_str().unwrap().to_string();
 
-        let (page0, total) = get_commits_paginated(path.clone(), 0, 30).unwrap();
+        let (page0, total) = tauri::async_runtime::block_on(get_commits_paginated(path.clone(), 0, 30)).unwrap();
         assert_eq!(total, 150, "总数不应被 100 条上限截断");
         assert_eq!(page0.len(), 30);
         assert_eq!(page0[0].hash, hashes[149], "第一页应是最新提交");
-        let (page4, _) = get_commits_paginated(path.clone(), 4, 30).unwrap();
+        let (page4, _) = tauri::async_runtime::block_on(get_commits_paginated(path.clone(), 4, 30)).unwrap();
         assert_eq!(page4.len(), 30);
-        let (page5, _) = get_commits_paginated(path.clone(), 5, 30).unwrap();
+        let (page5, _) = tauri::async_runtime::block_on(get_commits_paginated(path.clone(), 5, 30)).unwrap();
         assert_eq!(page5.len(), 0);
     }
 
@@ -3083,10 +3097,10 @@ mod backend_fix_tests {
         let dir = tempfile::tempdir().unwrap();
         let repo = git2::Repository::init(dir.path()).unwrap();
         commit(&repo, "fix: a'b bug", 1_700_000_000, &[("a.txt", "x\n")]);
-        let res = git_query(
+        let res = tauri::async_runtime::block_on(git_query(
             dir.path().to_str().unwrap().to_string(),
             "SELECT COUNT(*) FROM commits WHERE message CONTAINS 'a''b'".into(),
-        ).unwrap();
+        )).unwrap();
         assert_eq!(res.rows, vec![vec!["1".to_string()]]);
     }
 

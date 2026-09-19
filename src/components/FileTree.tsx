@@ -34,7 +34,8 @@ export default function FileTree({ repoPath, onSelectFile }: { repoPath: string;
   const renderNode = (node: TreeNode, parentPath = '') => {
     const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
 
-    const sortedChildren = node.children.sort((a, b) => {
+    // 渲染期不可变排序：直接 sort 会原地修改 state 里的节点数据
+    const sortedChildren = [...node.children].sort((a, b) => {
       if (a.is_directory !== b.is_directory) {
         return b.is_directory ? 1 : -1; // 文件夹排在前面
       }
@@ -71,7 +72,7 @@ export default function FileTree({ repoPath, onSelectFile }: { repoPath: string;
       <button className="btn btn-blue" onClick={loadTree}>加载文件树</button>
       {error && <div className="analysis-item" style={{ color: 'var(--danger)' }}>{error}</div>}
       <div style={{ maxHeight: 400, overflowY: 'auto', marginTop: 12 }}>
-        {nodes.sort((a, b) => {
+        {[...nodes].sort((a, b) => {
           if (a.is_directory !== b.is_directory) {
             return b.is_directory ? 1 : -1; // 文件夹排在前面
           }

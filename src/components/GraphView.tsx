@@ -16,6 +16,12 @@ export default function GraphView({ repoPath, onSelectCommit }: { repoPath: stri
   const positionsRef = useRef<Record<string, { x: number; y: number }>>({});
   const commitsRef = useRef<GraphCommit[]>([]);
   const [error, setError] = useState('');
+  // 用 ref 持有最新回调：画布只在 repoPath 变化时重绘，
+  // 点击时始终取到最新的 onSelectCommit（避免首帧闭包里的旧 repoPath/selectedCommit）
+  const onSelectRef = useRef(onSelectCommit);
+  useEffect(() => {
+    onSelectRef.current = onSelectCommit;
+  });
 
   useEffect(() => {
     const loadGraph = async () => {
@@ -98,7 +104,7 @@ export default function GraphView({ repoPath, onSelectCommit }: { repoPath: stri
               const d = Math.hypot(pos.x - x, pos.y - y);
               if (d <= 14 && (!best || d < best.dist)) best = { hash, dist: d };
             }
-            if (best) onSelectCommit(best.hash);
+            if (best) onSelectRef.current(best.hash);
           }}
           style={{ cursor: 'pointer' }}
         />

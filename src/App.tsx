@@ -100,15 +100,9 @@ interface StashEntry {
 
 interface RebaseCommit {
   hash: string;
-  message: string;
   author: string;
   time: string;
-}
-
-interface RebaseOperation {
-  hash: string;
-  action: string;
-  new_message?: string;
+  message: string;
 }
 
 const useRipple = () => {
@@ -282,7 +276,6 @@ function App() {
   const [contributors, setContributors] = useState<Contributor[]>([]);
   const [hotFiles, setHotFiles] = useState<HotFile[]>([]);
   const [stashList, setStashList] = useState<StashEntry[]>([]);
-  const [_rebaseOps, setRebaseOps] = useState<RebaseOperation[]>([]);
 
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
 
@@ -474,7 +467,7 @@ function App() {
   const loadContributors = async () => { try { const res = await invoke<Contributor[]>('get_contributors', { path: repoPath }); setContributors(res); openPanel('contributors', setShowContributors); } catch (e: any) { setError(String(e)); } };
   const loadHotFiles = async () => { try { const res = await invoke<HotFile[]>('get_hot_files', { path: repoPath }); setHotFiles(res); openPanel('hotfiles', setShowHotFiles); } catch (e: any) { setError(String(e)); } };
   const loadStashList = async () => { try { const res = await invoke<StashEntry[]>('stash_list', { path: repoPath }); setStashList(res); openPanel('stash', setShowStash); } catch (e: any) { setError(String(e)); } };
-  const loadRebaseCommits = async () => { try { const res = await invoke<RebaseCommit[]>('get_rebase_commits', { path: repoPath, count: 20 }); setRebaseOps(res.map(c => ({ hash: c.hash, action: 'pick' }))); openPanel('rebase', setShowRebase); } catch (e: any) { setError(String(e)); } };
+  const loadRebaseCommits = async () => { try { await invoke<RebaseCommit[]>('get_rebase_commits', { path: repoPath, count: 20 }); openPanel('rebase', setShowRebase); } catch (e: any) { setError(String(e)); } };
 
   const renderSectionHeader = (title: string, section: string) => (
     <div className="section-header" onClick={() => toggleSection(section)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', cursor: 'pointer', userSelect: 'none' }}>
