@@ -16,13 +16,14 @@ interface TimeMachineSnapshot {
   files: TimeMachineFile[];
 }
 
-// 后端返回 "YYYY-MM-DD HH:MM:SS"（UTC）。`new Date("... ...")` 这种
-// 空格分隔格式在 WKWebView（macOS）返回 Invalid Date，且 Chromium 按
-// 本地时区解析，都与后端的 UTC 时间戳不一致 —— 这里按 UTC 手动解析
+// 后端返回 "YYYY-MM-DD HH:MM:SS"，并已按提交者本地时区格式化（与 git log 一致）。
+// `new Date("... ...")` 这种空格分隔格式在 WKWebView（macOS）返回 Invalid Date，
+// 且 Chromium 会按 UTC 解析 "YYYY-MM-DD HH:MM:SS" —— 这里按本地时区手动解析，
+// 得到的时间戳才能与提交的原始 unix 秒对上（滑块用 unix 秒比较，与时区无关）
 function parseGitTime(s: string): number {
   const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/.exec(s.trim());
   if (!m) return NaN;
-  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000;
+  return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime() / 1000;
 }
 
 export default function TimeMachine({ repoPath }: { repoPath: string }) {

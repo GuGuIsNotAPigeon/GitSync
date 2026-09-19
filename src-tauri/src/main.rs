@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use git2::{Oid, Repository, Sort};
+use chrono::TimeZone;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -78,11 +79,20 @@ const MAIN_COMMIT_LIMIT: usize = 100;
 const ANALYSIS_COMMIT_LIMIT: usize = 2000;
 const QUERY_COMMIT_LIMIT: usize = 500;
 
+// 提交时间统一按本地时区格式化（与 git log 展示一致）；此前用
+// DateTime::from_timestamp（UTC），非 UTC 用户看到的时间整体偏移。
+// 时间超出 chrono 范围时回退「未知时间」
+fn format_local_time(seconds: i64) -> String {
+    chrono::Local
+        .timestamp_opt(seconds, 0)
+        .single()
+        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+        .unwrap_or_else(|| "未知时间".into())
+}
+
 fn commit_to_json(oid: Oid, commit: &git2::Commit<'_>) -> Commit {
     let time = commit.time();
-    let timestamp = chrono::DateTime::from_timestamp(time.seconds(), 0)
-        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-        .unwrap_or_else(|| "未知时间".into());
+    let timestamp = format_local_time(time.seconds());
     Commit {
         hash: oid.to_string(),
         author: commit.author().name().unwrap_or("未知").to_string(),
@@ -300,11 +310,7 @@ fn get_commit_detail(path: String, commit_hash: String) -> Result<CommitDetail, 
 
     let author_name = commit.author().name().unwrap_or("未知").to_string();
     let message = commit.message().unwrap_or("").to_string();
-
-    let time = commit.time();
-    let timestamp = chrono::DateTime::from_timestamp(time.seconds(), 0)
-        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-        .unwrap_or_else(|| "未知时间".into());
+    let timestamp = format_local_time(commit.time().seconds());
 
     Ok(CommitDetail {
         hash: commit_hash,
@@ -372,12 +378,9 @@ fn get_blame(path: String, file_path: String) -> Result<Vec<BlameLine>, String> 
         let author = sig.as_ref().map_or("未知", |s| {
             if let Ok(name) = s.name() { name } else { "未知" }
         });
-        let time = sig.as_ref().map_or("未知时间".into(), |s| {
-            let t = s.when();
-            chrono::DateTime::from_timestamp(t.seconds(), 0)
-                .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-                .unwrap_or_else(|| "未知时间".into())
-        });
+        let time = sig
+            .as_ref()
+            .map_or("未知时间".into(), |s| format_local_time(s.when().seconds()));
 
         let start_line = hunk.final_start_line() as usize;
         let num_lines = hunk.lines_in_hunk() as usize;
@@ -472,10 +475,7 @@ fn get_file_timeline_impl(repo: &Repository, file_path: &str) -> Result<Vec<File
         if file_changed {
             let author_name = commit.author().name().unwrap_or("未知").to_string();
             let message = commit.message().unwrap_or("").to_string();
-            let time = commit.time();
-            let timestamp = chrono::DateTime::from_timestamp(time.seconds(), 0)
-                .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-                .unwrap_or_else(|| "未知时间".into());
+            let timestamp = format_local_time(commit.time().seconds());
 
             entries.push(FileTimelineEntry {
                 commit_hash: oid.to_string(),
@@ -1196,10 +1196,7 @@ fn get_graph_commits(path: String) -> Result<Vec<GraphCommit>, String> {
     for oid in revwalk {
         let oid = oid.map_err(|e| format!("遍历失败: {}", e))?;
         let commit = repo.find_commit(oid).map_err(|e| format!("找不到提交: {}", e))?;
-        let time = commit.time();
-        let timestamp = chrono::DateTime::from_timestamp(time.seconds(), 0)
-            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-            .unwrap_or_else(|| "未知时间".into());
+        let timestamp = format_local_time(commit.time().seconds());
 
         let parents: Vec<String> = commit.parent_ids().map(|id| id.to_string()).collect();
 
@@ -1943,9 +1940,7 @@ fn collect_all_data(repo: &Repository) -> Result<(Vec<Commit>, Vec<FileChangeRow
         let parent_tree = commit.parents().next().and_then(|p| p.tree().ok());
 
         let time = commit.time();
-        let timestamp = chrono::DateTime::from_timestamp(time.seconds(), 0)
-            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-            .unwrap_or_else(|| "未知时间".into());
+        let timestamp = format_local_time(time.seconds());
 
         let hash = oid.to_string();
         commits.push(Commit {
@@ -2254,10 +2249,7 @@ fn get_time_machine_snapshot(path: String, timestamp: i64) -> Result<TimeMachine
 
     let commit_hash = oid.to_string();
     let author_name = commit.author().name().unwrap_or("未知").to_string();
-    let commit_time = commit.time();
-    let timestamp_str = chrono::DateTime::from_timestamp(commit_time.seconds(), 0)
-        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-        .unwrap_or_else(|| "未知时间".into());
+    let timestamp_str = format_local_time(commit.time().seconds());
     let message = commit.message().unwrap_or("").to_string();
 
     let mut files = Vec::new();
@@ -2897,10 +2889,19 @@ mod backend_fix_tests {
         commit(&repo, "day two", 1_760_086_400, &[("a.txt", "2\n")]);
         let path = dir.path().to_str().unwrap().to_string();
 
-        // 1_760_086_400 = 2025-10-10 (UTC)。结束日期当天的提交应被保留
-        let res = filter_commits(path.clone(), None, None, Some("2025-10-10".into()), None).unwrap();
+        // 提交时间现按本地时区显示，期望日期从时间戳现场推算，测试在任何时区都成立
+        // （两个时间戳相差 24h，本地日期必然不同）
+        let day_of = |secs: i64| {
+            chrono::Local
+                .timestamp_opt(secs, 0)
+                .single()
+                .unwrap()
+                .format("%Y-%m-%d")
+                .to_string()
+        };
+        let res = filter_commits(path.clone(), None, None, Some(day_of(1_760_086_400)), None).unwrap();
         assert_eq!(res.len(), 2, "date_to 当天的提交不应被排除");
-        let res = filter_commits(path.clone(), None, None, Some("2025-10-09".into()), None).unwrap();
+        let res = filter_commits(path.clone(), None, None, Some(day_of(1_760_000_000)), None).unwrap();
         assert_eq!(res.len(), 1);
     }
 
@@ -2950,6 +2951,15 @@ mod backend_fix_tests {
         assert_eq!(local.get().peel_to_commit().unwrap().id(), Oid::from_str(&feat_tip).unwrap());
         assert_eq!(local.upstream().unwrap().name().unwrap().unwrap(), "origin/feat");
         assert_eq!(std::fs::read_to_string(dir.path().join("a.txt")).unwrap(), "feature\n", "工作区应更新到 feat");
+    }
+
+    #[test]
+    fn local_time_format_shape() {
+        // 只验证格式（YYYY-MM-DD HH:MM:SS，19 字符）与回退路径，不断言具体时区值
+        let s = format_local_time(0);
+        assert_eq!(s.len(), 19, "格式应为 YYYY-MM-DD HH:MM:SS: {}", s);
+        assert!(s.as_bytes()[4] == b'-' && s.as_bytes()[10] == b' ', "格式应为 YYYY-MM-DD HH:MM:SS: {}", s);
+        assert_eq!(format_local_time(i64::MAX), "未知时间", "超范围时间应回退");
     }
 
     #[test]
