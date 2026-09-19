@@ -8,6 +8,7 @@ import FeedbackOverlay from './components/FeedbackOverlay';
 import { DEFAULT_BG_BASE64 } from './assets/defaultBg';
 import { parseAndRenderDiff } from './utils/diffUtils';
 import { useLatestRequest } from './hooks/useLatestRequest';
+import { pickBackgroundImage } from './utils/backgroundImage';
 import WelcomeModal from './components/WelcomeModal';  // <^welcome弹窗组件!thanks to @GuGulsNotAPigeon &>
 
 import SemanticSearch from './components/SemanticSearch';
@@ -489,34 +490,34 @@ function App() {
     return localStorage.getItem('hasSeenWelcome') !== 'true';
   });
 
-  const handleWelcomeSelect = (style: 'preset' | 'md' | 'custom') => {
+  const handleWelcomeSelect = async (style: 'preset' | 'md' | 'custom') => {
+    if (style === 'custom') {
+      // 取消选图则留在欢迎页，让用户重新选
+      const ok = await handlePickBackgroundDirect();
+      if (!ok) return;
+    }
     setBgStyle(style);
     localStorage.setItem('bgStyle', style);
     localStorage.setItem('hasSeenWelcome', 'true');
     setShowWelcome(false);
-    // <^自 => 文件选择器&>
-    if (style === 'custom') {
-      // open文件选择器
-      handlePickBackgroundDirect();
-    }
   };
 
   // <^原handlePickBackground => 独立函数&>
-  const handlePickBackgroundDirect = async () => {
+  const handlePickBackgroundDirect = async (): Promise<boolean> => {
     try {
-      const b64 = await invoke<string>('pick_background_image');
-      if (b64) {
-        setBgBase64(b64);
-        localStorage.setItem('bg_base64', b64);
-        setBgStyle('custom');
-        localStorage.setItem('bgStyle', 'custom');
-      }
+      const b64 = await pickBackgroundImage();
+      setBgBase64(b64);
+      localStorage.setItem('bg_base64', b64);
+      setBgStyle('custom');
+      localStorage.setItem('bgStyle', 'custom');
+      return true;
     } catch (e: any) {
       // 用户在文件选择器里点取消不算错误，静默返回
       const msg = String(e);
       if (!msg.includes('取消')) {
         setError(msg);
       }
+      return false;
     }
   };
 

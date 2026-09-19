@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { motion } from 'framer-motion';
 import { VscSymbolColor, VscLightbulb, VscFileMedia, VscColorMode, VscLayout, VscCheck } from 'react-icons/vsc';
+import { pickBackgroundImage } from '../utils/backgroundImage';
 
 interface UIManagerProps {
   bgOpacity: number;
@@ -16,7 +16,8 @@ interface UIManagerProps {
   setTorchSize: (v: number) => void;
   bgStyle: 'preset' | 'md' | 'custom';
   setBgStyle: (v: 'preset' | 'md' | 'custom') => void;
-  onPickCustomBackground: () => void;
+  // 返回是否成功选图：用户取消时调用方据此保持原背景风格
+  onPickCustomBackground: () => Promise<boolean>;
   bgBase64: string;   // <^++新增：用于自定义缩略图&>
 }
 
@@ -49,16 +50,18 @@ export default function UIManager({
     setCustomBgError('');
     setBgPreview(null);
     try {
-      const b64 = await invoke<string>('pick_background_image');
-      if (b64) {
-        setBgBase64(b64);
-        localStorage.setItem('bg_base64', b64);
-        setBgPreview(b64);
-        setBgStyle('custom');
-        localStorage.setItem('bgStyle', 'custom');
-      }
+      const b64 = await pickBackgroundImage();
+      setBgBase64(b64);
+      localStorage.setItem('bg_base64', b64);
+      setBgPreview(b64);
+      setBgStyle('custom');
+      localStorage.setItem('bgStyle', 'custom');
     } catch (e: any) {
-      setCustomBgError(String(e));
+      // 用户在文件选择器里点取消不算错误，静默返回
+      const msg = String(e);
+      if (!msg.includes('取消')) {
+        setCustomBgError(msg);
+      }
     }
   };
 
@@ -71,12 +74,14 @@ export default function UIManager({
     localStorage.setItem('bgStyle', 'preset');
   };
 
-  const handleBgStyleChange = (style: 'preset' | 'md' | 'custom') => {
+  const handleBgStyleChange = async (style: 'preset' | 'md' | 'custom') => {
+    if (style === 'custom') {
+      // 成功时内部已置 custom；用户取消则保持原背景风格不变
+      await onPickCustomBackground();
+      return;
+    }
     setBgStyle(style);
     localStorage.setItem('bgStyle', style);
-    if (style === 'custom') {
-      onPickCustomBackground();
-    }
   };
 
   return (
