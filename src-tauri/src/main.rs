@@ -1060,7 +1060,7 @@ fn semantic_search_impl(repo: &Repository, query: &str) -> Result<Vec<SearchResu
                                 results.push(SearchResult {
                                     commit_hash: oid.to_string(),
                                     author: commit.author().name().unwrap_or("未知").to_string(),
-                                    time: "".to_string(),
+                                    time: format_local_time(commit.time().seconds()),
                                     file_path: path.clone(),
                                     line_number,
                                     content: content.to_string(),
@@ -2932,6 +2932,7 @@ mod backend_fix_tests {
         assert_eq!(res.len(), 1);
         assert_eq!(res[0].line_number, 3, "应报告真实行号而非匹配序号");
         assert_eq!(res[0].file_path, "a.txt");
+        assert_eq!(res[0].time.len(), 19, "时间应为格式化本地时间而非空串: {:?}", res[0].time);
     }
 
     #[test]
