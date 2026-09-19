@@ -1373,7 +1373,7 @@ struct InlineChange {
     length: usize,
     kind: String,
 }
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 struct DiffLine {
     origin: String,
     content: String,
@@ -1534,8 +1534,9 @@ fn get_diff_detail(path: String, commit_hash: String) -> Result<Vec<(String, Dif
                         plus_buf.push(String::from_utf8_lossy(line.content()).to_string());
                     }
                     '-' => {
-                        // 新的删除块开始：先结算上一组配对
-                        flush_paired_lines(&mut current_lines, &mut minus_buf, &mut plus_buf);
+                        // 连续删除行继续进缓冲，与缓冲的插入行按序配对；
+                        // 缓冲只在上下文行/hunk 头/结尾处结算，提前 flush 会让
+                        // 连续删除行里除最后一行外全部退化为整行高亮
                         minus_buf.push(String::from_utf8_lossy(line.content()).to_string());
                     }
                     origin => {
@@ -2862,6 +2863,30 @@ mod backend_fix_tests {
         assert_eq!(d.old_content, "bye\n");
         assert_eq!(d.new_content, "");
         let _ = base;
+    }
+
+    #[test]
+    fn diff_detail_pairs_consecutive_minus_lines() {
+        // 回归：'-' 分支提前 flush 缓冲，连续删除行中只有最后一行能与插入行配对
+        let dir = tempfile::tempdir().unwrap();
+        let repo = git2::Repository::init(dir.path()).unwrap();
+        commit(&repo, "base", 1_700_000_000, &[("a.txt", "keep0\nconst x = 1;\nconst y = 2;\nkeep3\n")]);
+        let second = commit(&repo, "replace both", 1_700_000_100, &[("a.txt", "keep0\nconst x = 10;\nconst y = 20;\nkeep3\n")]);
+        let path = dir.path().to_str().unwrap().to_string();
+
+        let files = get_diff_detail(path, second).unwrap();
+        let lines = &files[0].1.hunks[0].lines;
+        let minus: Vec<&DiffLine> = lines.iter().filter(|l| l.origin == "-").collect();
+        let plus: Vec<&DiffLine> = lines.iter().filter(|l| l.origin == "+").collect();
+        assert_eq!(minus.len(), 2, "应有两行删除: {:?}", lines);
+        assert_eq!(plus.len(), 2, "应有两行插入: {:?}", lines);
+        // -const x = 1 / -const y = 2 与 +const x = 10 / +const y = 20 两两配对，
+        // 每行的高亮长度都应小于整行
+        for l in minus.iter().chain(plus.iter()) {
+            let whole = l.content.trim_end().chars().count();
+            let marked: usize = l.inline_changes.iter().map(|c| c.length).sum();
+            assert!(marked < whole, "行 {:?} 应有部分级标记而非整行: {:?}", l.content, l.inline_changes);
+        }
     }
 
     #[test]
