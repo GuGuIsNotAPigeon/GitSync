@@ -17,19 +17,22 @@ export default function FileViewer({ repoPath, filePath, onClose }: FileViewerPr
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
+    // 快速切换文件时，慢的旧响应不得覆盖新文件内容
+    let cancelled = false;
     const fetchFileContent = async () => {
       setLoading(true);
       setError('');
       try {
         const res = await invoke<string>('get_file_content', { path: repoPath, filePath });
-        setContent(res);
+        if (!cancelled) setContent(res);
       } catch (e: any) {
-        setError(String(e));
+        if (!cancelled) setError(String(e));
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     fetchFileContent();
+    return () => { cancelled = true; };
   }, [repoPath, filePath]);
 
   const lines = content.split('\n');

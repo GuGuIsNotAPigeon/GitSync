@@ -7,6 +7,7 @@ import './App.css';
 import FeedbackOverlay from './components/FeedbackOverlay';
 import { DEFAULT_BG_BASE64 } from './assets/defaultBg';
 import { parseAndRenderDiff } from './utils/diffUtils';
+import { useLatestRequest } from './hooks/useLatestRequest';
 import WelcomeModal from './components/WelcomeModal';  // <^welcome弹窗组件!thanks to @GuGulsNotAPigeon &>
 
 import SemanticSearch from './components/SemanticSearch';
@@ -412,16 +413,23 @@ function App() {
     }
   }, [scrollToPanelId]);
 
+  const isLatestDetail = useLatestRequest();
   const handleCommitClick = async (hash: string) => {
     if (selectedCommit === hash) { setSelectedCommit(null); setCommitDetail(null); return; }
     setSelectedCommit(hash);
     setCurrentFileIndex(0);
     setDetailLoading(true);
     setToast(null);
+    // 快速连点两个提交时，慢的旧响应不得覆盖新详情、不得提前撤掉加载态
+    const stillLatest = isLatestDetail();
     try {
       const detail = await invoke<CommitDetail>('get_commit_detail', { path: repoPath, commitHash: hash });
-      setCommitDetail(detail);
-    } catch (e: any) { setError(String(e)); } finally { setDetailLoading(false); }
+      if (stillLatest()) setCommitDetail(detail);
+    } catch (e: any) {
+      if (stillLatest()) setError(String(e));
+    } finally {
+      if (stillLatest()) setDetailLoading(false);
+    }
   };
 
   const handleSearch = async () => {
