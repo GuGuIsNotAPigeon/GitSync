@@ -43,6 +43,13 @@ else
   unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
 fi
 
+# 由 release.yml 的仓库变量 REQUIRE_MACOS_SIGNING=1 打开：缺凭据时立刻失败，
+# 而不是静默降级成 ad-hoc 签名产出一个未公证的 DMG；默认关闭，未配证书时发布照常
+if [ "${REQUIRE_SIGNING:-0}" = "1" ] && [ "$SIGNED" -eq 0 ]; then
+  echo "::error::REQUIRE_MACOS_SIGNING=1 但未配置 APPLE_CERTIFICATE，无法签名与公证；补齐凭据或取消该仓库变量"
+  exit 1
+fi
+
 npm run tauri build -- "${ARGS[@]}"
 
 if [ "$SIGNED" -eq 0 ]; then

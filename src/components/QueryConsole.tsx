@@ -6,6 +6,7 @@ interface QueryResult {
   columns: string[];
   rows: string[][];
   elapsed_ms: number;
+  truncated: boolean;
 }
 
 export default function QueryConsole({ repoPath }: { repoPath: string }) {
@@ -106,6 +107,7 @@ export default function QueryConsole({ repoPath }: { repoPath: string }) {
           <>
             <span className="time" style={{ fontSize: 12, color: 'var(--text-dim)', alignSelf: 'center' }}>
               耗时: {result.elapsed_ms}ms | {result.rows.length} 行
+              {result.truncated && <span style={{ color: 'var(--accent)' }}>（已达行数上限，结果被截断）</span>}
             </span>
             <button className="btn" onClick={exportCSV} style={{ fontSize: 12, padding: '4px 12px' }}>
               导出 CSV

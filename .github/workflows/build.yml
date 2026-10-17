@@ -7,6 +7,10 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# 默认令牌权限收敛为只读：注入或恶意依赖脚本拿到的令牌无法 push / 删 artifact
+permissions:
+  contents: read
+
 jobs:
   build-ubuntu:
     runs-on: ubuntu-22.04
@@ -22,8 +26,9 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf rpm
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: swatinem/rust-cache@v2
+    # 第三方 action 固定到 commit：tag / 分支可变，被改写即可在高权限 job 里执行任意代码
+    - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec  # stable
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6  # v2
     - run: npm ci
     - run: npm run tauri build -- --ci
     - name: Package tar.gz (Linux)
@@ -73,8 +78,16 @@ jobs:
       with:
         name: bundle-ubuntu
         path: out
+    # 文件名含 package.json 的 version，属 PR 可控输入：经 env 传递并做白名单校验，
+    # 直接插值进 run 会被 shell 二次解析（文件名里带引号即可逃逸）
     - name: Move installer
-      run: find out -type f -name "${{ matrix.file }}" -exec mv -n {} ./ \;
+      env:
+        ARTIFACT: ${{ matrix.file }}
+      run: |
+        case "$ARTIFACT" in
+          "" | *[!A-Za-z0-9._+-]*) echo "::error::非法产物文件名: $ARTIFACT"; exit 1 ;;
+        esac
+        find out -type f -name "$ARTIFACT" -exec mv -n {} ./ \;
     - uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.file }}
@@ -91,8 +104,8 @@ jobs:
       with:
         node-version: 22
         cache: npm
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: swatinem/rust-cache@v2
+    - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec  # stable
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6  # v2
     - run: npm ci
     - run: npm run tauri build -- --ci
     - name: Collect installers
@@ -123,7 +136,13 @@ jobs:
         name: bundle-windows
         path: out
     - name: Move installer
-      run: find out -type f -name "${{ matrix.file }}" -exec mv -n {} ./ \;
+      env:
+        ARTIFACT: ${{ matrix.file }}
+      run: |
+        case "$ARTIFACT" in
+          "" | *[!A-Za-z0-9._+-]*) echo "::error::非法产物文件名: $ARTIFACT"; exit 1 ;;
+        esac
+        find out -type f -name "$ARTIFACT" -exec mv -n {} ./ \;
     - uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.file }}
@@ -132,13 +151,16 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    # 签名凭据只给非 PR 运行：fork PR 本来拿不到 secrets，但同仓库分支的 PR
+    # 会带着 6 个 APPLE_* 跑 PR 改过的 npm scripts / build.rs，等于把
+    # Developer ID 证书交出去。PR 上走空值 -> 脚本自动降级为 ad-hoc 签名
     env:
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_CERTIFICATE: ${{ github.event_name != 'pull_request' && secrets.APPLE_CERTIFICATE || '' }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+      APPLE_SIGNING_IDENTITY: ${{ github.event_name != 'pull_request' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+      APPLE_ID: ${{ github.event_name != 'pull_request' && secrets.APPLE_ID || '' }}
+      APPLE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.APPLE_PASSWORD || '' }}
+      APPLE_TEAM_ID: ${{ github.event_name != 'pull_request' && secrets.APPLE_TEAM_ID || '' }}
     outputs:
       files: ${{ steps.files.outputs.files }}
     steps:
@@ -147,8 +169,8 @@ jobs:
       with:
         node-version: 22
         cache: npm
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: swatinem/rust-cache@v2
+    - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec  # stable
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6  # v2
     - run: npm ci
     - name: Package macOS DMG
       run: bash scripts/package-macos-dmg.sh
@@ -180,7 +202,13 @@ jobs:
         name: bundle-macos
         path: out
     - name: Move installer
-      run: find out -type f -name "${{ matrix.file }}" -exec mv -n {} ./ \;
+      env:
+        ARTIFACT: ${{ matrix.file }}
+      run: |
+        case "$ARTIFACT" in
+          "" | *[!A-Za-z0-9._+-]*) echo "::error::非法产物文件名: $ARTIFACT"; exit 1 ;;
+        esac
+        find out -type f -name "$ARTIFACT" -exec mv -n {} ./ \;
     - uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.file }}
