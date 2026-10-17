@@ -6,8 +6,35 @@ on:
       - 'v*'
   workflow_dispatch:
 
+# 默认令牌权限收敛为只读：发布流程不需要写仓库
+permissions:
+  contents: read
+
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # 版本号有 package.json / tauri.conf.json / PKGBUILD 多个来源，
+      # 不校验就会出现 v9.9.9 的 tag 里装着 0.3.4 的产物
+      - name: Verify version consistency
+        run: |
+          V=$(node -p "require('./package.json').version")
+          T=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "$T" != "$V" ]; then
+            echo "::error::src-tauri/tauri.conf.json 的 $T 与 package.json 的 $V 不一致"
+            exit 1
+          fi
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "v$V" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} 与 package.json 的 v$V 不一致"
+            exit 1
+          fi
+
   build:
+    needs: verify
     runs-on: ${{ matrix.os }}
     env:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -37,9 +64,12 @@ jobs:
           node-version: 22
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
+      # 第三方 action 固定到 commit，避免 tag/分支被改写后执行任意代码
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec  # stable
         with:
           target: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6  # v2
 
       - name: Install dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -54,8 +84,14 @@ jobs:
         if: matrix.os != 'macos-latest'
         run: npm run tauri build -- --ci --target ${{ matrix.target }}
 
+      # 仅当仓库变量 REQUIRE_MACOS_SIGNING=1 时才强制要求签名。
+      # 目前仓库没有配置 Apple 凭据，发布走 ad-hoc 签名并在日志里告警，
+      # 硬失败会让每次 tag 发布直接变红；等凭据配好再把变量置 1，
+      # 那时缺凭据（证书过期/secret 被删）就会让发布失败而不是静默出未公证包
       - name: Package macOS DMG
         if: matrix.os == 'macos-latest'
+        env:
+          REQUIRE_SIGNING: ${{ vars.REQUIRE_MACOS_SIGNING }}
         run: bash scripts/package-macos-dmg.sh ${{ matrix.target }}
 
       - name: Package tar.gz (Linux)
@@ -77,4 +113,4 @@ jobs:
             src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*
             src-tauri/target/${{ matrix.target }}/release/bundle/macos/*
             src-tauri/target/${{ matrix.target }}/release/bundle/*.tar.gz
-          if-no-files-found: warn
+          if-no-files-found: error
