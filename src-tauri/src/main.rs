@@ -529,20 +529,24 @@ fn get_health_report_impl(repo: &Repository) -> Result<HealthReport, String> {
         }
     }
 
-    // 大文件扫描遍历 HEAD 树全量；此前只查 statuses 里的脏文件，干净仓库永远报不出
+    // 大文件扫描遍历 HEAD 树全量；此前只查 statuses 里的脏文件，干净仓库永远报不出。
+    // 只读对象头取大小：find_blob 会把 blob 完整解压进内存，扫一遍整棵树
+    // 等于把仓库内容全读一次（实测 128MB 数据 714ms / RSS +64MB，read_header 为 100µs）
     if let Ok(tree) = repo.head().and_then(|h| h.peel_to_tree()) {
-        let _ = tree.walk(git2::TreeWalkMode::PreOrder, |root, entry| {
-            if entry.kind() == Some(git2::ObjectType::Blob) {
-                if let Ok(blob) = repo.find_blob(entry.id()) {
-                    if blob.size() > 1024 * 1024 {
-                        if let Ok(name) = entry.name() {
-                            large_files.push(format!("{}{}", root, name));
+        if let Ok(odb) = repo.odb() {
+            let _ = tree.walk(git2::TreeWalkMode::PreOrder, |root, entry| {
+                if entry.kind() == Some(git2::ObjectType::Blob) {
+                    if let Ok((size, _)) = odb.read_header(entry.id()) {
+                        if size > 1024 * 1024 {
+                            if let Ok(name) = entry.name() {
+                                large_files.push(format!("{}{}", root, name));
+                            }
                         }
                     }
                 }
-            }
-            git2::TreeWalkResult::Ok
-        });
+                git2::TreeWalkResult::Ok
+            });
+        }
     }
 
     let mut stale_branches = Vec::new();
@@ -1938,6 +1942,8 @@ struct QueryResult {
     columns: Vec<String>,
     rows: Vec<Vec<String>>,
     elapsed_ms: u64,
+    // 命中行数上限时为 true：截断必须让前端能说明，否则用户以为这就是全部结果
+    truncated: bool,
 }
 
 #[derive(Clone)]
@@ -2104,8 +2110,19 @@ fn rewrite_contains(sql: &str) -> String {
     out
 }
 
-fn format_sql_error(e: &rusqlite::Error) -> String {
+fn format_sql_error(e: &rusqlite::Error, timeout: std::time::Duration) -> String {
+    if let rusqlite::Error::SqliteFailure(err, _) = e {
+        if err.code == rusqlite::ErrorCode::OperationInterrupted {
+            return format!(
+                "查询超过 {} 秒已被中止。多表连接或递归查询可能产生了爆炸式行数，请加上 WHERE / LIMIT 缩小范围",
+                timeout.as_secs()
+            );
+        }
+    }
     let msg = e.to_string();
+    if msg.contains("too big") || msg.contains("exceeds size limit") {
+        return format!("{}（单个字符串/BLOB 上限 {} MB）", msg, QUERY_VALUE_LIMIT / 1024 / 1024);
+    }
     if msg.contains("no such table") {
         format!("表不存在，可用表: commits, file_changes（{}）", msg)
     } else {
@@ -2113,21 +2130,43 @@ fn format_sql_error(e: &rusqlite::Error) -> String {
     }
 }
 
-// 收集全量数据入内存 SQLite + 执行查询，属重活；async 命令运行在线程池，避免卡住 UI 主线程
+// 单条查询的时间上限：控制台允许写多表连接和递归 CTE，没有中断手段时
+// 一次误操作就能把应用挂死（内存库跑飞后只能杀进程）
+const QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+// 返回行数上限：两表自连接的行数是乘积，真实仓库的 file_changes 已足够撑爆内存
+const QUERY_ROW_LIMIT: usize = 5000;
+// 单个值（字符串/BLOB）长度上限：hex(zeroblob(1e8)) 这类函数能一次产出几百 MB
+const QUERY_VALUE_LIMIT: i32 = 16 * 1024 * 1024;
+
 #[tauri::command]
 async fn git_query(path: String, sql: String) -> Result<QueryResult, String> {
+    git_query_impl(&path, &sql, QUERY_TIMEOUT, QUERY_ROW_LIMIT)
+}
+
+// 收集全量数据入内存 SQLite + 执行查询，属重活；async 命令运行在线程池，避免卡住 UI 主线程
+fn git_query_impl(
+    path: &str,
+    sql: &str,
+    timeout: std::time::Duration,
+    row_limit: usize,
+) -> Result<QueryResult, String> {
     let start = std::time::Instant::now();
 
-    let expanded = shellexpand::tilde(&path).to_string();
+    let expanded = shellexpand::tilde(path).to_string();
     let repo = Repository::open(Path::new(&expanded))
         .map_err(|e| format!("无法打开仓库: {}", e))?;
 
     let (commits, file_changes) = collect_all_data(&repo)?;
 
-    let sql = rewrite_contains(&sql);
+    let sql = rewrite_contains(sql);
 
     let conn = rusqlite::Connection::open_in_memory()
         .map_err(|e| format!("无法创建查询引擎: {}", e))?;
+    conn.set_limit(
+        rusqlite::limits::Limit::SQLITE_LIMIT_LENGTH,
+        QUERY_VALUE_LIMIT,
+    )
+    .map_err(|e| format!("无法设置取值上限: {}", e))?;
     conn.execute_batch(
         "CREATE TABLE commits (
             hash TEXT COLLATE NOCASE,
@@ -2177,14 +2216,26 @@ async fn git_query(path: String, sql: String) -> Result<QueryResult, String> {
     }))
     .map_err(|e| format!("无法设置查询权限: {}", e))?;
 
-    let mut stmt = conn.prepare(&sql).map_err(|e| format_sql_error(&e))?;
+    // 中断手段：progress 回调返回 true 时 SQLite 以 SQLITE_INTERRUPT 中止语句。
+    // 行数上限拦不住「不出结果行但一直在算」的查询（如 count 套无限递归 CTE）
+    let deadline = std::time::Instant::now() + timeout;
+    conn.progress_handler(100_000, Some(move || std::time::Instant::now() > deadline))
+        .map_err(|e| format!("无法设置查询超时: {}", e))?;
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| format_sql_error(&e, timeout))?;
     let columns: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
-    let mut rows_iter = stmt.query(rusqlite::params![]).map_err(|e| format_sql_error(&e))?;
+    let mut rows_iter = stmt.query(rusqlite::params![]).map_err(|e| format_sql_error(&e, timeout))?;
     let mut result_rows: Vec<Vec<String>> = Vec::new();
-    while let Some(row) = rows_iter.next().map_err(|e| format_sql_error(&e))? {
+    let mut truncated = false;
+    while let Some(row) = rows_iter.next().map_err(|e| format_sql_error(&e, timeout))? {
+        // 到上限就停止拉取：SQLite 是流式出行，连接这类查询不会先把乘积全算出来
+        if result_rows.len() >= row_limit {
+            truncated = true;
+            break;
+        }
         let mut row_out = Vec::with_capacity(columns.len());
         for i in 0..columns.len() {
-            let cell = match row.get_ref(i).map_err(|e| format_sql_error(&e))? {
+            let cell = match row.get_ref(i).map_err(|e| format_sql_error(&e, timeout))? {
                 rusqlite::types::ValueRef::Null => String::new(),
                 rusqlite::types::ValueRef::Integer(n) => n.to_string(),
                 rusqlite::types::ValueRef::Real(f) => format!("{}", f),
@@ -2201,6 +2252,7 @@ async fn git_query(path: String, sql: String) -> Result<QueryResult, String> {
         columns,
         rows: result_rows,
         elapsed_ms: elapsed,
+        truncated,
     })
 }
 
@@ -2280,6 +2332,8 @@ async fn get_time_machine_snapshot(path: String, timestamp: i64) -> Result<TimeM
     let message = commit.message().unwrap_or("").to_string();
 
     let mut files = Vec::new();
+    // 与健康报告同理：大小只读对象头，拖滑块时不能把每个 blob 都解压一遍
+    let odb = repo.odb().map_err(|e| format!("无法打开对象库: {}", e))?;
     tree.walk(git2::TreeWalkMode::PreOrder, |root, entry| {
         let name = entry.name().unwrap_or("未知");
         // walk 回调的 root 是带尾斜杠的父目录前缀（顶层为空串），直接拼接即完整路径
@@ -2289,7 +2343,7 @@ async fn get_time_machine_snapshot(path: String, timestamp: i64) -> Result<TimeM
         let size = if is_dir {
             0
         } else {
-            repo.find_blob(entry.id()).map(|b| b.size()).unwrap_or(0)
+            odb.read_header(entry.id()).map(|(size, _)| size).unwrap_or(0)
         };
         files.push(TimeMachineFile {
             path: full_path,
@@ -2685,6 +2739,67 @@ mod query_tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].version, "未知时间");
     }
+
+    fn query_with(dir: &Path, sql: &str, timeout_ms: u64, row_limit: usize) -> Result<QueryResult, String> {
+        git_query_impl(
+            dir.to_str().unwrap(),
+            sql,
+            std::time::Duration::from_millis(timeout_ms),
+            row_limit,
+        )
+    }
+
+    // 40 个提交 × 5 个文件 = 200 条 file_changes，够撑出两表自连接的乘积
+    fn repo_with_many_file_changes(dir: &Path) {
+        let repo = git2::Repository::init(dir).unwrap();
+        for i in 0..40 {
+            let files: Vec<(String, String)> = (0..5)
+                .map(|f| (format!("f{}.txt", f), format!("v{}\n", i)))
+                .collect();
+            let borrowed: Vec<(&str, &str)> = files.iter().map(|(p, c)| (p.as_str(), c.as_str())).collect();
+            commit(&repo, "alice", &format!("c{}", i), 1_700_000_000 + i as i64, &borrowed);
+        }
+    }
+
+    #[test]
+    fn query_row_limit_truncates_instead_of_exhausting_memory() {
+        let dir = tempfile::tempdir().unwrap();
+        repo_with_many_file_changes(dir.path());
+
+        // 乘积 200^2 = 4 万行，上限 100 应截断并如实标记
+        let res = query_with(dir.path(), "SELECT * FROM file_changes a, file_changes b", 10_000, 100).unwrap();
+        assert_eq!(res.rows.len(), 100);
+        assert!(res.truncated, "命中上限时应标记截断");
+
+        // 未命中上限时不应误报
+        let res = query_with(dir.path(), "SELECT COUNT(*) FROM file_changes", 10_000, 100).unwrap();
+        assert_eq!(res.rows, vec![vec!["200".to_string()]]);
+        assert!(!res.truncated);
+    }
+
+    #[test]
+    fn query_timeout_interrupts_runaway_join() {
+        let dir = tempfile::tempdir().unwrap();
+        repo_with_many_file_changes(dir.path());
+        // 四路自连接 = 200^4 = 16 亿行，且 count 不产出中间行，行数上限拦不住它
+        let err = query_with(
+            dir.path(),
+            "SELECT COUNT(*) FROM file_changes a, file_changes b, file_changes c, file_changes d",
+            300,
+            100,
+        )
+        .unwrap_err();
+        assert!(err.contains("已被中止"), "应提示查询被中止: {}", err);
+    }
+
+    #[test]
+    fn query_rejects_oversized_value() {
+        let dir = tempfile::tempdir().unwrap();
+        setup_repo(dir.path());
+        // 单个值上限挡掉一次性产出几百 MB 的函数
+        let err = query_with(dir.path(), "SELECT hex(zeroblob(100000000))", 10_000, 100).unwrap_err();
+        assert!(err.contains("上限"), "应提示取值上限: {}", err);
+    }
 }
 
 #[cfg(test)]
@@ -3025,6 +3140,9 @@ mod backend_fix_tests {
             snap.files.iter().map(|f| f.path.clone()).collect::<Vec<_>>()
         );
         assert!(snap.files.iter().any(|f| f.path == "docs"));
+        // 回归：大小改为只读对象头后仍需给出真实值（取失败会退化成 0）
+        let root = snap.files.iter().find(|f| f.path == "root.txt").expect("应有 root.txt");
+        assert_eq!(root.size, 2, "文件大小应取对象头而非 0，实际 {} 字节", root.size);
     }
 
     fn big_repo(dir: &Path, count: usize) -> Vec<String> {
